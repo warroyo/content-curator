@@ -1,0 +1,46 @@
+# `docker compose up -d` runs the service: HTTP API, built-in scheduler and metrics.
+# Host networking lets it reach LiteLLM on the host's 127.0.0.1:4000; the API binds
+# CURATOR_API_HOST:CURATOR_API_PORT (default 127.0.0.1:8090).
+services:
+  curator:
+    build:
+      context: .
+      target: runtime
+    image: ghcr.io/warroyo/content-curator:${CURATOR_TAG:-dev}
+    command: ["serve"]
+    user: "${CURATOR_UID:-1000}:${CURATOR_GID:-1000}"
+    network_mode: host
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      CURATOR_DATA_DIR: /data
+      CURATOR_CONFIG_DIR: /config
+    volumes:
+      - ${CURATOR_DATA_PATH:-./data}:/data
+      - ${CURATOR_CONFIG_PATH:-./config}:/config
+    restart: unless-stopped
+    init: true
+    stop_grace_period: 40s
+    # Each check starts a small Python process, so check rarely.
+    healthcheck:
+      test: ["CMD", "curator-healthcheck"]
+      interval: 5m
+      timeout: 10s
+      start_period: 30s
+      start_interval: 5s
+      retries: 2
+    # Low CPU weight: under contention the agents on the host win. One core at most.
+    cpu_shares: 256
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+
+  test:
+    profiles: [dev]
+    build:
+      context: .
+      target: test
+    network_mode: none

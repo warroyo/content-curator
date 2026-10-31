@@ -1,0 +1,10 @@
+# Service settings. The scheduler runs inside `curator serve` and sleeps between runs,
+# so the service uses CPU only while a job runs.
+schedule:
+  timezone: America/Denver
+  misfire_grace_seconds: 3600
+  jobs:
+    # Overnight: collect, score with the local model while the EVO-X2 is idle, pick, report.
+    - {job: run, cron: "30 1 * * *"}
+    # Optional daytime collection, for feeds that publish more than 50 items a day.
+    # - {job: collect, cron: "0 13 * * *"}

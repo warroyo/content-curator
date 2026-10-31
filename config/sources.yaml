@@ -1,0 +1,36 @@
+# Source registry. Adding a source here approves it; delete or set enabled: false to stop it.
+# `curator import-opml` appends to this file and rewrites it, which drops comments.
+# Fields: id, name, url, type (rss), topics, enabled, discovery (manual|opml|discovered),
+# approved, priority, fetch_interval_hours. See docs/configuration.md.
+sources:
+  # AI and agent engineering
+  - {id: simonwillison, name: Simon Willison, url: "https://simonwillison.net/atom/everything/", topics: [topic-ai]}
+  - {id: latent-space, name: Latent Space, url: "https://www.latent.space/feed", topics: [topic-ai]}
+  - {id: interconnects, name: Interconnects, url: "https://www.interconnects.ai/feed", topics: [topic-ai]}
+  - {id: lilianweng, name: Lilian Weng, url: "https://lilianweng.github.io/index.xml", topics: [topic-ai]}
+  - {id: raschka, name: Ahead of AI (Sebastian Raschka), url: "https://magazine.sebastianraschka.com/feed", topics: [topic-ai]}
+  - {id: huggingface, name: Hugging Face blog, url: "https://huggingface.co/blog/feed.xml", topics: [topic-ai]}
+  - {id: openai-news, name: OpenAI news, url: "https://openai.com/news/rss.xml", topics: [topic-ai]}
+  - {id: mcp-blog, name: Model Context Protocol blog, url: "https://blog.modelcontextprotocol.io/index.xml", topics: [topic-ai]}
+
+  # Infrastructure and cloud native
+  - {id: kubernetes, name: Kubernetes blog, url: "https://kubernetes.io/feed.xml", topics: [topic-kubernetes]}
+  - {id: lwkd, name: Last Week in Kubernetes Development, url: "https://lwkd.info/feed.xml", topics: [topic-kubernetes]}
+  - {id: cncf, name: CNCF blog, url: "https://www.cncf.io/feed/", topics: [topic-kubernetes]}
+  - {id: platformengineering, name: platformengineering.org, url: "https://platformengineering.org/blog/rss.xml", topics: [topic-infrastructure]}
+  - {id: williamlam, name: William Lam, url: "https://williamlam.com/feed", topics: [topic-infrastructure]}
+  - {id: vmware-vcf, name: VMware Cloud Foundation blog, url: "https://blogs.vmware.com/cloud-foundation/feed/", topics: [topic-infrastructure]}
+  - {id: cloudflare, name: Cloudflare blog, url: "https://blog.cloudflare.com/rss/", topics: [topic-infrastructure]}
+  - {id: tailscale, name: Tailscale blog, url: "https://tailscale.com/blog/index.xml", topics: [topic-infrastructure]}
+  - {id: thenewstack, name: The New Stack, url: "https://thenewstack.io/feed/", topics: [topic-infrastructure]}
+
+  # Technology
+  - {id: lwn, name: LWN.net, url: "https://lwn.net/headlines/rss", topics: [topic-technology]}
+  - {id: hn-frontpage, name: Hacker News (250+ points), url: "https://hnrss.org/frontpage?points=250", topics: [topic-technology]}
+  - {id: github-blog, name: GitHub blog, url: "https://github.blog/feed/", topics: [topic-technology]}
+  - {id: jvns, name: Julia Evans, url: "https://jvns.ca/atom.xml", topics: [topic-technology]}
+  - {id: martinfowler, name: Martin Fowler, url: "https://martinfowler.com/feed.atom", topics: [topic-technology]}
+  - {id: pragmatic-engineer, name: The Pragmatic Engineer, url: "https://newsletter.pragmaticengineer.com/feed", topics: [topic-technology]}
+  - {id: chipsandcheese, name: Chips and Cheese, url: "https://chipsandcheese.com/feed/", topics: [topic-hardware]}
+  - {id: servethehome, name: ServeTheHome, url: "https://www.servethehome.com/feed/", topics: [topic-hardware]}
+  - {id: phoronix, name: Phoronix, url: "https://www.phoronix.com/rss.php", topics: [topic-hardware]}

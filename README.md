@@ -1,0 +1,60 @@
+# content-curator
+
+## Overview
+
+A self-hosted curator that reads a few hundred feed items a day and picks the 5–10 worth your time. It collects RSS and Atom feeds, drops exact duplicates, has a local model score each item against an interest profile, and selects a small, diverse set with a reason for each pick. Phase 1a writes the picks to a markdown report; Phase 1b will publish them to Readwise Reader.
+
+It runs as one container: a small service with an HTTP API, a built-in scheduler and Prometheus metrics. It sleeps between runs, using almost no CPU, and does its work overnight. The model is any OpenAI-compatible endpoint; in the home lab that is LiteLLM's `local-qwen` alias on `ubuntu-home`.
+
+## How it works
+
+```mermaid
+flowchart LR
+  subgraph svc[curator serve]
+    SCH[scheduler] --> J[job runner]
+    API[HTTP API] --> J
+  end
+  J --> C[collect] --> DB[(SQLite /data)]
+  J --> S[score] <-->|JSON schema| M[LiteLLM local-qwen]
+  J --> P[curate] --> R[report + picks]
+  DB --- S
+  DB --- P
+```
+
+- The scheduler starts the nightly `run` job (collect, score, curate) from `config/app.yaml`. The API starts the same jobs on demand and serves status, picks and item explanations.
+- `collect` fetches sources with conditional requests, gets full text from the feed or the page (respecting `robots.txt`), and marks items with the same URL, canonical URL or text as duplicates.
+- `score` sends each fresh item to the model and validates six 0–10 scores, topics and a one-line explanation. Scores are cached.
+- `curate` computes the weighted overall score in code, fills discovery slots, caps items per source and writes the report.
+
+## Quick start
+
+Prerequisites: Docker 24+ with the compose plugin, and an OpenAI-compatible endpoint with a key.
+
+1. Configure the endpoint:
+   ```sh
+   cp .env.example .env   # set CURATOR_LLM_API_KEY
+   ```
+2. Edit `config/sources.yaml`, `config/interests.yaml` and the schedule in `config/app.yaml`.
+3. Start the service and run the pipeline once:
+   ```sh
+   make up
+   make run                                   # POST /api/jobs/run
+   make status                                # GET /api/status
+   make picks                                 # latest report
+   ```
+4. Run the tests:
+   ```sh
+   make test
+   ```
+
+API and CLI reference: [docs/architecture.md](docs/architecture.md#api).
+
+## Repo structure
+
+- `src/content_curator/` - the application: `service.py` (API, scheduler), `jobs.py`, `collectors/`, `ingest.py`, `scoring.py`, `select.py`, `report.py`, `cli.py`
+- `config/` - `app.yaml` (schedule), `sources.yaml` (source registry), `interests.yaml` (profile, weights, selection budget)
+- `tests/` - unit and mocked integration tests, run in the `test` image target
+- `Dockerfile`, `compose.yaml`, `Makefile` - build, test and run everything in Docker
+- `docs/architecture.md` - components, API, data model, resource use, failure handling
+- `docs/configuration.md` - environment variables and YAML reference
+- `docs/decisions.md` - why it is built this way

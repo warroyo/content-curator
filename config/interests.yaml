@@ -1,0 +1,71 @@
+# Interest profile, scoring weights and selection budget. See docs/configuration.md.
+groups:
+  - name: AI and agent engineering
+    tag: topic-ai
+    weight: 1.0
+    topics:
+      - {name: AI agents and orchestration, weight: 1.0}
+      - {name: "Agent identity, authentication, and authorization", weight: 1.0}
+      - {name: MCP and agent tooling, weight: 0.9}
+      - {name: Local inference and model serving (llama.cpp, vLLM, AMD Strix Halo, quantization), weight: 0.9}
+      - {name: LLM architecture and emerging techniques, weight: 0.7}
+
+  - name: Infrastructure and cloud native
+    tag: topic-kubernetes
+    weight: 0.9
+    topics:
+      - {name: Kubernetes, weight: 1.0}
+      - {name: Platform engineering, weight: 0.8}
+      - {name: VMware Cloud Foundation, vSphere Supervisor and VKS, weight: 0.9}
+
+  - name: Infrastructure automation, networking and security
+    tag: topic-infrastructure
+    weight: 0.8
+    topics:
+      - {name: Infrastructure automation (Terraform, Ansible, GitOps), weight: 0.8}
+      - {name: Networking and security, weight: 0.7}
+
+  - name: Technology
+    tag: topic-technology
+    weight: 0.6
+    topics:
+      - {name: Developer tools, weight: 0.8}
+      - {name: Computing hardware, weight: 0.6}
+      - {name: Emerging technologies, weight: 0.5}
+      - {name: Interesting engineering projects, weight: 0.6}
+
+exclusions:
+  - Funding rounds, earnings and stock news
+  - Product marketing and webinar announcements
+  - Consumer gadget reviews and deals
+  - Crypto and web3
+
+preferred_sources:
+  - Primary documentation and project release notes
+  - Engineers writing about their own work
+
+discovery_notes: >-
+  About a quarter of the picks should be excellent items outside these interests:
+  deep engineering stories, science, history of computing, well-argued essays.
+
+scoring:
+  # Weights for the overall score; they are normalized, so only ratios matter.
+  weights:
+    relevance: 0.35
+    novelty: 0.15
+    depth: 0.2
+    source_quality: 0.15
+    actionability: 0.1
+    discovery_value: 0.05
+  max_words: 3000
+  full_text_min_words: 250
+
+selection:
+  daily_count: 8
+  discovery_share: 0.25
+  max_per_source: 2
+  min_score: 5.5
+  max_age_days: 7
+  max_reading_minutes: null
+  near_misses: 10
+  words_per_minute: 230
