@@ -39,13 +39,14 @@ sources:
   - id: kubernetes             # unique slug
     name: Kubernetes blog
     url: https://kubernetes.io/feed.xml
-    type: rss                  # rss is the only type so far
+    type: rss                  # rss or podcast
     topics: [topic-kubernetes]
     enabled: true
     discovery: manual          # manual | opml | discovered
     approved: true             # only approved, enabled sources are fetched
     priority: 0
     fetch_interval_hours: 4
+    apple_id: 1406537385       # podcasts only, optional: looked up from the feed URL when missing
 ```
 
 Removing a source from the file disables it in the database; its items stay. `import-opml` adds feeds not already present (by normalized URL), uses the OPML folder as the topic, and rewrites the file, which drops comments.
@@ -79,5 +80,20 @@ Removing a source from the file disables it in the database; its items stay. `im
 | `borderline` | 0.62 | pairs from here up to `same_story`, and any same-source pair above it, are decided by the chat model; every pair in a story must clear it |
 | `max_judgements` | 80 | chat-model decisions per run |
 | `embed_words` | 300 | words after the title that are embedded |
+
+- `selection.max_per_media`: most picks per media type per run, default `{podcast: 2}`.
+- `podcast_discovery`: weekly Apple Podcasts discovery.
+
+| Key | Default | Meaning |
+|---|---|---|
+| `enabled` | true | turn discovery off |
+| `queries` | [] | search terms, one Apple search each |
+| `use_top_chart` | true | also consider Apple's US Technology top 100 |
+| `min_episodes` | 20 | drop shows with fewer episodes |
+| `active_within_days` | 30 | drop shows that have not published lately |
+| `max_judged` | 30 | candidate shows sent to the chat model per run |
+| `min_fit` | 7 | fit (0-10) needed for a trial |
+| `max_new_per_run` | 5 | trials added per run |
+| `trial_days` | 30 | a trial with no pick in this many days is dropped |
 
 A discovery pick needs `outside_interests`, discovery value 7+, and depth and source quality 5+.

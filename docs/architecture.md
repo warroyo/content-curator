@@ -4,7 +4,10 @@
 
 | Module | Role |
 |---|---|
-| `collectors/` | One class per source type behind the `Collector` interface. Only `rss` exists; YouTube, podcasts, Hacker News and GitHub releases are later phases. |
+| `collectors/` | One class per source type behind the `Collector` interface: `rss` and `podcast`. YouTube is on the backlog. |
+| `apple.py` | Apple Podcasts through the keyless iTunes Search API: episode links by GUID, show search, the Technology top chart. |
+| `transcripts.py` | Published podcast transcripts (VTT, SRT, JSON, HTML) to plain text. |
+| `discover.py` | Weekly podcast discovery: candidate shows, cheap filters, a chat-model fit check, trial sources. |
 | `ingest.py` | Syncs `sources.yaml` into the database, runs collectors, extracts article text, marks exact duplicates. |
 | `normalize.py` | URL normalization and content hashing. |
 | `stories.py` | Embeds fresh items through `/v1/embeddings` (`local-embed`) and groups same-story coverage; borderline pairs go to the chat model. |
@@ -67,6 +70,18 @@ The nightly run embeds each fresh item (title plus the first 300 words) and stor
 Selection takes one candidate per story, the best-scored item, and the report lists the rest as "Also covered by". Once publishing exists, a story with a published pick is never picked again.
 
 If the embedding model is down, grouping is skipped for that run and the rest of the run goes on.
+
+## Podcasts
+
+A `podcast` source is an RSS feed. Each episode keeps its duration, show notes, audio URL and, when the feed has a Podcasting 2.0 `podcast:transcript` tag, the transcript (preferring text, VTT or SRT over HTML). No audio is downloaded or transcribed. An episode is scored on its show notes plus the transcript; with notes only it is low confidence. An item whose link is the audio file or the show's home page is keyed by its GUID.
+
+Each new episode gets an Apple Podcasts link: the show is found once by searching its name and matching the feed URL, then the show's recent episodes are looked up and matched by `episodeGuid`, which is the RSS GUID. The report links the episode to Apple Podcasts and to its page. Selection counts a podcast's length in minutes of audio and allows at most `max_per_media.podcast` episodes a day.
+
+### Discovery
+
+Weekly, `discover` builds candidates from a search per `podcast_discovery.queries` term and from Apple's US Technology top chart. It drops shows already known or judged in the last 90 days, shows with fewer than `min_episodes` episodes, shows silent for `active_within_days`, and shows publishing more than 10 episodes a week (back-catalogue dumps, generated shows). The rest, up to `max_judged`, go to the chat model with their last 8 episode titles, which returns a 0-10 fit against the interest profile. The best, at `min_fit` or more, become **trial sources**: collected and scored nightly (5 newest episodes at most), marked in the report, never written to `sources.yaml`. Following one is adding it to `sources.yaml`. A trial with no pick in `trial_days` is disabled.
+
+First live run (2026-10-31): 197 candidates, 104 after filters, 30 judged in 7 minutes. Rejected included an agency-marketing feed, an AI-agent product directory, a formulaic paper-summary show and consumer gadget shows; added Kubernetes Bytes, The New Stack Podcast, Ship It Weekly and cloud2030.
 
 ## Deduplication
 

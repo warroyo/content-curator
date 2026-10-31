@@ -67,7 +67,7 @@ def embed_pending(conn: sqlite3.Connection, settings: Settings, interests: Inter
         f"""
         SELECT i.id, i.title, i.content_text, i.summary, e.input_hash AS old_hash, e.model AS old_model
         FROM items i LEFT JOIN embeddings e ON e.item_id = i.id
-        WHERE i.duplicate_of IS NULL AND i.extraction != 'pending'
+        WHERE i.duplicate_of IS NULL AND i.extraction NOT IN ('pending', 'stale')
           AND datetime(COALESCE(i.published_at, i.fetched_at)) >= datetime('now', '-{int(interests.selection.max_age_days)} days')
         ORDER BY i.id
         """

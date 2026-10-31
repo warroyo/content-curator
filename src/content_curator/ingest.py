@@ -14,12 +14,16 @@ from urllib.parse import urlsplit
 import httpx
 import trafilatura
 
+from content_curator import transcripts
+from content_curator.apple import Apple
 from content_curator.collectors import collector_for
 from content_curator.config import Settings, Source, load_interests
 from content_curator.db import Run, now
 from content_curator.normalize import content_hash, normalize_url, word_count
 
 log = logging.getLogger(__name__)
+
+TRIAL_MAX_ENTRIES = 5
 
 
 def http_client(settings: Settings) -> httpx.Client:
@@ -32,24 +36,30 @@ def http_client(settings: Settings) -> httpx.Client:
 
 
 def sync_sources(conn: sqlite3.Connection, sources: list[Source]) -> None:
-    """Make the sources table match sources.yaml. Sources removed from the file are disabled, not deleted."""
+    """Make the sources table match sources.yaml. Sources removed from the file are disabled, not deleted.
+
+    Trial sources found by discovery are not in the file and are left alone; adding one to the file
+    takes it over as an ordinary approved source.
+    """
     conn.execute("BEGIN")
     for s in sources:
         conn.execute(
             """
-            INSERT INTO sources(id, name, url, type, topics, enabled, approved, discovery, priority, fetch_interval_hours)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO sources(id, name, url, type, topics, enabled, approved, discovery, priority,
+                                fetch_interval_hours, apple_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(id) DO UPDATE SET
                 name=excluded.name, url=excluded.url, type=excluded.type, topics=excluded.topics,
                 enabled=excluded.enabled, approved=excluded.approved, discovery=excluded.discovery,
-                priority=excluded.priority, fetch_interval_hours=excluded.fetch_interval_hours
+                priority=excluded.priority, fetch_interval_hours=excluded.fetch_interval_hours,
+                apple_id=COALESCE(excluded.apple_id, sources.apple_id)
             """,
             (s.id, s.name, s.url, s.type, json.dumps(s.topics), int(s.enabled), int(s.approved),
-             s.discovery, s.priority, s.fetch_interval_hours),
+             s.discovery, s.priority, s.fetch_interval_hours, s.apple_id),
         )
     ids = [s.id for s in sources]
     conn.execute(
-        f"UPDATE sources SET enabled=0 WHERE id NOT IN ({','.join('?' * len(ids))})", ids
+        f"UPDATE sources SET enabled=0 WHERE discovery != 'trial' AND id NOT IN ({','.join('?' * len(ids))})", ids
     )
     conn.execute("COMMIT")
 
@@ -69,12 +79,14 @@ def collect(conn: sqlite3.Connection, settings: Settings, sources: list[Source],
     stats = run.stats
     stats.update(sources=0, not_modified=0, fetch_failures=0, entries=0, new_items=0, known_items=0)
     started = time.monotonic()
-    rows = conn.execute("SELECT * FROM sources WHERE enabled=1 AND approved=1").fetchall()
+    rows = conn.execute(
+        "SELECT * FROM sources WHERE enabled=1 AND (approved=1 OR discovery='trial')"
+    ).fetchall()
     with http_client(settings) as client:
         for row in rows:
             if not _due(row, force):
                 continue
-            source = by_id[row["id"]]
+            source = by_id.get(row["id"]) or _source_from_row(row)
             stats["sources"] += 1
             try:
                 result = collector_for(source.type)(client).collect(source, row["etag"], row["last_modified"])
@@ -88,11 +100,15 @@ def collect(conn: sqlite3.Connection, settings: Settings, sources: list[Source],
                 continue
             if result.not_modified:
                 stats["not_modified"] += 1
+            if row["discovery"] == "trial":
+                # A trial show contributes only its newest episodes, so one feed that republishes its
+                # back catalogue with fresh dates cannot flood the night's scoring.
+                result.entries = result.entries[:TRIAL_MAX_ENTRIES]
             new = 0
             conn.execute("BEGIN")
             for entry in result.entries:
                 stats["entries"] += 1
-                norm = normalize_url(entry.url)
+                norm = entry.key or normalize_url(entry.url)
                 exists = conn.execute(
                     "SELECT 1 FROM items WHERE normalized_url=? OR (source_id=? AND guid=?)",
                     (norm, source.id, entry.guid),
@@ -103,11 +119,13 @@ def collect(conn: sqlite3.Connection, settings: Settings, sources: list[Source],
                 conn.execute(
                     """
                     INSERT INTO items(source_id, guid, url, normalized_url, title, author, published_at, fetched_at,
-                                      summary, content_text, raw)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                      summary, content_text, raw, media, duration_s, audio_url, transcript_url,
+                                      transcript_type)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (source.id, entry.guid, entry.url, norm, entry.title, entry.author, entry.published_at, now(),
-                     entry.summary, entry.content_text, json.dumps(entry.raw, default=str)),
+                     entry.summary, entry.content_text, json.dumps(entry.raw, default=str), entry.media,
+                     entry.duration_s, entry.audio_url, entry.transcript_url, entry.transcript_type),
                 )
                 new += 1
             conn.execute(
@@ -118,11 +136,53 @@ def collect(conn: sqlite3.Connection, settings: Settings, sources: list[Source],
             conn.execute("COMMIT")
             stats["new_items"] += new
             log.info("collected", extra={"source": source.id, "entries": len(result.entries), "new": new})
+            if source.type == "podcast" and new:
+                linked = link_apple(conn, client, source, row["apple_id"], result.title)
+                stats["apple_links"] = stats.get("apple_links", 0) + linked
         extract_stats = extract_pending(conn, settings, client)
     stats.update(extract_stats)
     stats["duration_s"] = round(time.monotonic() - started, 1)
     run.finish()
     return stats
+
+
+def _source_from_row(row: sqlite3.Row) -> Source:
+    return Source(
+        id=row["id"], name=row["name"], url=row["url"], type=row["type"], topics=json.loads(row["topics"]),
+        enabled=bool(row["enabled"]), approved=bool(row["approved"]), discovery=row["discovery"],
+        priority=row["priority"], fetch_interval_hours=row["fetch_interval_hours"], apple_id=row["apple_id"],
+    )
+
+
+_apple: Apple | None = None
+
+
+def link_apple(conn: sqlite3.Connection, client: httpx.Client, source: Source, apple_id: int | None,
+               feed_title: str | None) -> int:
+    """Give a podcast's episodes their Apple Podcasts link, matched by GUID. Returns how many were linked."""
+    global _apple
+    _apple = _apple if _apple and _apple.client is client else Apple(client)
+    try:
+        show = source.apple_id or apple_id
+        if show is None:
+            show = _apple.find_show(source.name, source.url)
+            if show is None and feed_title and feed_title != source.name:
+                show = _apple.find_show(feed_title, source.url)
+            if show is None:
+                log.info("not on apple podcasts", extra={"source": source.id})
+                return 0
+            conn.execute("UPDATE sources SET apple_id=? WHERE id=?", (show, source.id))
+        links = _apple.episode_links(show)
+    except httpx.HTTPError as e:
+        log.warning("apple lookup failed", extra={"source": source.id, "error": str(e)})
+        return 0
+    linked = 0
+    for guid, url in links.items():
+        linked += conn.execute(
+            "UPDATE items SET listen_url=? WHERE source_id=? AND guid=? AND listen_url IS NULL",
+            (url, source.id, guid),
+        ).rowcount
+    return linked
 
 
 class Robots:
@@ -174,20 +234,45 @@ def _fetch_article(client: httpx.Client, robots: Robots, url: str) -> tuple[str,
 def extract_pending(
     conn: sqlite3.Connection, settings: Settings, client: httpx.Client, item_ids: list[int] | None = None
 ) -> dict:
-    """Get the full text for new items (all pending, or only item_ids), then mark exact duplicates."""
-    min_words = load_interests(settings.config_dir).scoring.full_text_min_words
-    sql = "SELECT id, url, content_text FROM items WHERE extraction='pending'"
+    """Get the full text for new items (all pending, or only item_ids), then mark exact duplicates.
+
+    Articles: the feed's text when long enough, else the page. Podcasts: show notes plus the published
+    transcript, never the episode page. Items already older than the freshness window are not fetched.
+    """
+    interests = load_interests(settings.config_dir)
+    min_words = interests.scoring.full_text_min_words
+    sql = f"""SELECT id, url, content_text, media, transcript_url, transcript_type,
+                     datetime(COALESCE(published_at, fetched_at)) <
+                         datetime('now', '-{int(interests.selection.max_age_days)} days') AS stale
+              FROM items WHERE extraction='pending'"""
     if item_ids is not None:
         sql += f" AND id IN ({','.join('?' * len(item_ids))})"
     rows = conn.execute(sql, item_ids or []).fetchall()
-    stats = {"extracted_from_feed": 0, "extracted_from_page": 0, "extraction_failed": 0, "duplicates": 0}
-    to_fetch = []
+    stats = {"extracted_from_feed": 0, "extracted_from_page": 0, "extraction_failed": 0, "transcripts": 0,
+             "stale": 0, "duplicates": 0}
+    to_fetch, episodes = [], []
     for row in rows:
-        if word_count(row["content_text"]) >= min_words:
+        if row["stale"] and item_ids is None:
+            _store_text(conn, row["id"], row["content_text"], None, "stale")
+            stats["stale"] += 1
+        elif row["media"] == "podcast":
+            episodes.append(row)
+        elif word_count(row["content_text"]) >= min_words:
             _store_text(conn, row["id"], row["content_text"], None, "feed")
             stats["extracted_from_feed"] += 1
         else:
             to_fetch.append(row)
+
+    for row in episodes:
+        transcript = None
+        if row["transcript_url"]:
+            transcript = transcripts.fetch(client, row["transcript_url"], row["transcript_type"])
+        if transcript:
+            stats["transcripts"] += 1
+            notes = row["content_text"] or ""
+            _store_text(conn, row["id"], f"{notes}\n\nTranscript:\n{transcript}".strip(), None, "transcript")
+        else:
+            _store_text(conn, row["id"], row["content_text"], None, "notes")
 
     robots = Robots(client, settings.user_agent)
     with ThreadPoolExecutor(max_workers=4) as pool:

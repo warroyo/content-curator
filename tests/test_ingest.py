@@ -2,19 +2,23 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
+from email.utils import format_datetime
+
 import httpx
 
 from content_curator import ingest
 from content_curator.config import Source
 
 LONG = " ".join(f"word{i}" for i in range(400))
+RECENT = format_datetime(datetime.now(UTC) - timedelta(hours=6), usegmt=True)
 
 FEED_A = f"""<?xml version="1.0"?>
 <rss version="2.0" xmlns:content="http://purl.org/rss/1.0/modules/content/"><channel><title>A</title>
 <item><title>Post one</title><link>https://a.test/one?utm_source=rss</link><guid>a-1</guid>
-  <pubDate>Fri, 30 Oct 2026 10:00:00 GMT</pubDate><content:encoded><![CDATA[<p>{LONG}</p>]]></content:encoded></item>
+  <pubDate>{RECENT}</pubDate><content:encoded><![CDATA[<p>{LONG}</p>]]></content:encoded></item>
 <item><title>Short post</title><link>https://a.test/two</link><guid>a-2</guid>
-  <pubDate>Fri, 30 Oct 2026 11:00:00 GMT</pubDate><description>Teaser only</description></item>
+  <pubDate>{RECENT}</pubDate><description>Teaser only</description></item>
 </channel></rss>"""
 
 # Same story as A's first post under a different URL, plus a link to A's second post.

@@ -69,6 +69,9 @@ selection:
   max_reading_minutes: null
   near_misses: 10
   words_per_minute: 230
+  # Most picks per media type per run.
+  max_per_media:
+    podcast: 2
 
 # Same-story grouping by embedding similarity (cosine, 0-1). Embeddings find candidate
 # pairs; the chat model decides most of them, because similarity alone does not separate
@@ -80,3 +83,23 @@ stories:
   borderline: 0.62
   max_judgements: 80
   embed_words: 300
+
+# Weekly search of Apple Podcasts for new shows. The best new, active technology show per
+# query is tried for trial_days; its picks are marked in the report, and following it is
+# adding it to sources.yaml. A trial show with no pick is dropped.
+podcast_discovery:
+  enabled: true
+  queries:
+    - AI agents
+    - LLM engineering
+    - local LLM inference
+    - Kubernetes
+    - platform engineering
+    - cloud native infrastructure
+    - VMware
+    - homelab
+    - developer tools
+    - computer hardware
+  max_new_per_run: 5
+  active_within_days: 30
+  trial_days: 30

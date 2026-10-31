@@ -19,6 +19,13 @@ class Entry:
     # Full text when the source provides it (for example a feed's content:encoded).
     content_text: str | None = None
     raw: dict = field(default_factory=dict)
+    # Dedup key when the URL is not one: a podcast episode without its own page.
+    key: str | None = None
+    media: str = "article"
+    duration_s: int | None = None
+    audio_url: str | None = None
+    transcript_url: str | None = None
+    transcript_type: str | None = None
 
 
 @dataclass
@@ -27,6 +34,7 @@ class CollectResult:
     etag: str | None = None
     last_modified: str | None = None
     not_modified: bool = False
+    title: str | None = None
 
 
 class Collector(Protocol):

@@ -34,6 +34,11 @@ class Candidate:
     discovery_value: float
     outside_interests: bool
     story_id: int | None = None
+    media: str = "article"
+    duration_s: int | None = None
+    listen_url: str | None = None
+    # From a trial source found by discovery, not one you follow.
+    trial: bool = False
     overall: float = 0.0
     minutes: int = 0
     # Other items covering the same story, best first: (source_name, title, url).
@@ -68,10 +73,14 @@ def select(candidates: list[Candidate], sel: Selection, weights: Weights) -> Res
         c.overall = overall(c, weights)  # type: ignore[arg-type]
         if c.confidence == "low":
             c.overall = round(c.overall - LOW_CONFIDENCE_PENALTY, 2)
-        c.minutes = max(1, round(c.word_count / sel.words_per_minute)) if c.word_count else 0
+        if c.media == "podcast":
+            c.minutes = round(c.duration_s / 60) if c.duration_s else 0
+        else:
+            c.minutes = max(1, round(c.word_count / sel.words_per_minute)) if c.word_count else 0
     candidates = collapse_stories(candidates)
 
     per_source: Counter[str] = Counter()
+    per_media: Counter[str] = Counter()
     minutes_left = sel.max_reading_minutes
     picks: list[Decision] = []
     skipped: list[Decision] = []
@@ -82,10 +91,15 @@ def select(candidates: list[Candidate], sel: Selection, weights: Weights) -> Res
         if per_source[c.source_id] >= sel.max_per_source:
             skipped.append(Decision(c, False, "skipped", f"source cap ({sel.max_per_source}/day) reached"))
             return False
+        media_cap = sel.max_per_media.get(c.media)
+        if media_cap is not None and per_media[c.media] >= media_cap:
+            skipped.append(Decision(c, False, "skipped", f"{c.media} cap ({media_cap}/day) reached"))
+            return False
         if minutes_left is not None and c.minutes > minutes_left:
             skipped.append(Decision(c, False, "skipped", f"{c.minutes} min exceeds remaining reading budget"))
             return False
         per_source[c.source_id] += 1
+        per_media[c.media] += 1
         if minutes_left is not None:
             minutes_left -= c.minutes
         taken.add(c.item_id)
@@ -150,7 +164,7 @@ def load_candidates(conn: sqlite3.Connection, interests: Interests) -> list[Cand
     rows = conn.execute(
         f"""
         SELECT i.id, i.source_id, s.name AS source_name, i.title, i.url, i.published_at, i.word_count,
-               i.story_id, sc.*
+               i.story_id, i.media, i.duration_s, i.listen_url, s.discovery AS source_discovery, sc.*
         FROM items i
         JOIN scores sc ON sc.item_id = i.id
         JOIN sources s ON s.id = i.source_id
@@ -169,7 +183,8 @@ def load_candidates(conn: sqlite3.Connection, interests: Interests) -> list[Cand
             explanation=r["explanation"], topics=json.loads(r["topics"]), relevance=r["relevance"],
             novelty=r["novelty"], depth=r["depth"], source_quality=r["source_quality"],
             actionability=r["actionability"], discovery_value=r["discovery_value"],
-            outside_interests=bool(r["outside_interests"]), story_id=r["story_id"],
+            outside_interests=bool(r["outside_interests"]), story_id=r["story_id"], media=r["media"],
+            duration_s=r["duration_s"], listen_url=r["listen_url"], trial=r["source_discovery"] == "trial",
         )
         for r in rows
     ]

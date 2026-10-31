@@ -33,3 +33,15 @@ The embedding model is Qwen3-Embedding-0.6B on the EVO-X2, behind LiteLLM's `loc
 ## 2026-10-31: embeddings find candidates, the chat model decides
 
 Calibration on 177 items (15,576 pairs) with Qwen3-Embedding-0.6B: median similarity 0.27, true same-story pairs between 0.65 and 0.87, false pairs up to 0.87 (LWN's daily "Security updates for Friday/Thursday" at 0.873, two unrelated OpenAI customer stories at 0.813). No threshold separates them. So pairs from 0.62 up go to the chat model, auto-merge is only for near-duplicates at 0.92 from different sources, and two items from one source are always judged. First run: 47 judgements in 4.5 minutes, 7 stories of 17 items, every merge and every high-similarity rejection correct on inspection.
+
+## 2026-10-31: Apple Podcasts links instead of Spotify
+
+The plan linked episodes to Spotify. Spotify needs a developer app, matches episodes only by title and date, and has restricted its Web API for new apps. Apple's iTunes Search API needs no key and returns each episode's RSS GUID, so matching is exact. Will is fine listening in Apple Podcasts. The episode page stays the fallback. YouTube is deferred to the backlog: it needs a Data API key and Will watches little YouTube, so it has to be discovery-led.
+
+## 2026-10-31: podcast discovery through trials judged by the chat model
+
+Apple's keyword search ranks by relevance, not date, and its results for a topic like "AI agents" are mostly junk (generated shows, product directories, dead or one-episode shows). The top chart is better quality but broad. Discovery therefore takes both as candidates, filters on cheap facts (episodes, recency, cadence), and has the chat model judge fit from each show's recent episodes, as section 4.10 of the plan describes. Found shows run as trials rather than waiting for approval, because discovery is the point, and a trial that never produces a pick drops out. A trial contributes at most its 5 newest episodes a night, after one feed republished 30 old episodes with fresh dates.
+
+## 2026-10-31: thinking stays on
+
+Turning off Qwen's thinking would cut scoring time about 3x, but the run is overnight and time does not matter; quality does. Revisit only if the source list grows enough to push the run past morning.

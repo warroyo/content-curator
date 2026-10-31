@@ -64,6 +64,8 @@ class Source(BaseModel):
     approved: bool = True
     priority: int = 0
     fetch_interval_hours: float = 4
+    # Apple Podcasts show id, for podcast sources. Found from the feed URL when not set.
+    apple_id: int | None = None
 
     @field_validator("id")
     @classmethod
@@ -111,6 +113,8 @@ class Selection(BaseModel):
     max_reading_minutes: int | None = None
     near_misses: int = 10
     words_per_minute: int = 230
+    # Most picks per media type per run; types not listed are only limited by daily_count.
+    max_per_media: dict[str, int] = Field(default_factory=lambda: {"podcast": 2})
 
 
 class Stories(BaseModel):
@@ -130,6 +134,28 @@ class Stories(BaseModel):
     embed_words: int = 300
 
 
+class PodcastDiscovery(BaseModel):
+    """Weekly search of Apple Podcasts for new shows; found shows run as trial sources."""
+
+    enabled: bool = True
+    # Search terms; each finds technology shows on Apple Podcasts.
+    queries: list[str] = Field(default_factory=list)
+    # New trial shows added per discovery run, across all queries.
+    max_new_per_run: int = 5
+    # A show must have published within this many days to be tried.
+    active_within_days: int = 30
+    # A show needs this many episodes to be considered: drops one-off and brand-new shows.
+    min_episodes: int = 20
+    # Include Apple's US Technology top chart in the candidates, besides the query results.
+    use_top_chart: bool = True
+    # Fit score (0-10) from the chat model needed for a show to be tried.
+    min_fit: int = 7
+    # Most candidate shows sent to the chat model per run, best-ranked first.
+    max_judged: int = 30
+    # A trial show with no pick within this many days is dropped.
+    trial_days: int = 30
+
+
 class Interests(BaseModel):
     groups: list[TopicGroup]
     exclusions: list[str] = Field(default_factory=list)
@@ -138,6 +164,7 @@ class Interests(BaseModel):
     scoring: Scoring = Field(default_factory=Scoring)
     selection: Selection = Field(default_factory=Selection)
     stories: Stories = Field(default_factory=Stories)
+    podcast_discovery: PodcastDiscovery = Field(default_factory=PodcastDiscovery)
 
 
 class ScheduledJob(BaseModel):

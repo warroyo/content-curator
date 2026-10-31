@@ -34,3 +34,9 @@ sources:
   - {id: chipsandcheese, name: Chips and Cheese, url: "https://chipsandcheese.com/feed/", topics: [topic-hardware]}
   - {id: servethehome, name: ServeTheHome, url: "https://www.servethehome.com/feed/", topics: [topic-hardware]}
   - {id: phoronix, name: Phoronix, url: "https://www.phoronix.com/rss.php", topics: [topic-hardware]}
+
+  # Podcasts: scored on show notes plus the published transcript; linked to Apple Podcasts.
+  # apple_id is optional; it is looked up from the feed URL when missing.
+  - {id: practical-ai, name: Practical AI, type: podcast, url: "https://feeds.transistor.fm/practical-ai-machine-learning-data-science-llm", topics: [topic-ai], fetch_interval_hours: 24}
+  - {id: changelog, name: The Changelog, type: podcast, url: "https://changelog.com/podcast/feed", topics: [topic-technology], fetch_interval_hours: 24}
+  - {id: se-daily, name: Software Engineering Daily, type: podcast, url: "https://softwareengineeringdaily.com/feed/podcast/", topics: [topic-technology], fetch_interval_hours: 24}

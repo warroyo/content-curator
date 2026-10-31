@@ -20,6 +20,7 @@ MODEL_UNAVAILABLE = Counter("curator_model_unavailable_total", "Score runs stopp
 MODEL_TOKENS = Counter("curator_model_tokens_total", "Model tokens", ["kind"])
 ITEMS_EMBEDDED = Counter("curator_items_embedded_total", "Items embedded")
 STORIES = Gauge("curator_stories", "Same-story groups among fresh items at the last grouping")
+TRIAL_SHOWS_ADDED = Counter("curator_trial_shows_added_total", "Podcast shows added as trial sources")
 PICKS = Counter("curator_picks_total", "Items picked", ["bucket"])
 
 
@@ -38,6 +39,8 @@ def record(job: str, stats: dict) -> None:
         ITEMS_EMBEDDED.inc(stats.get("embedded", 0))
         if "stories" in stats:
             STORIES.set(stats["stories"])
+    elif job == "discover":
+        TRIAL_SHOWS_ADDED.inc(stats.get("added", 0))
     elif job == "curate":
         for bucket, n in stats.get("buckets", {}).items():
             PICKS.labels(bucket).inc(n)

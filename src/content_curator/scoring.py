@@ -86,14 +86,23 @@ def item_prompt(row: sqlite3.Row, source_name: str, max_words: int) -> tuple[str
     words = text.split()
     truncated = len(words) > max_words
     body = " ".join(words[:max_words]) + (" [truncated]" if truncated else "")
-    full = row["extraction"] in ("feed", "page")
+    podcast = row["media"] == "podcast"
+    full = row["extraction"] in ("feed", "page", "transcript")
+    # The article lines stay exactly as they were, so a change here does not rescore every article.
+    if podcast:
+        minutes = round((row["duration_s"] or 0) / 60)
+        length = f"Podcast episode, {minutes} minutes" if minutes else "Podcast episode, length unknown"
+        label = "Show notes and transcript:" if full else "Only the show notes are available:"
+    else:
+        length = f"{row['word_count']} words"
+        label = "Content:" if full else "Only a summary is available:"
     parts = [
         f"Title: {row['title']}",
         f"Source: {source_name}",
         f"URL: {row['url']}",
         f"Published: {row['published_at'] or 'unknown'}",
-        f"Length: {row['word_count']} words",
-        "Content:" if full else "Only a summary is available:",
+        f"Length: {length}",
+        label,
         body or "(no text available)",
     ]
     return "\n".join(parts), full
@@ -174,7 +183,7 @@ def score_pending(
         SELECT i.*, s.name AS source_name, sc.input_hash AS old_hash
         FROM items i JOIN sources s ON s.id = i.source_id
         LEFT JOIN scores sc ON sc.item_id = i.id
-        WHERE i.duplicate_of IS NULL AND i.extraction != 'pending'
+        WHERE i.duplicate_of IS NULL AND i.extraction NOT IN ('pending', 'stale')
           AND datetime(COALESCE(i.published_at, i.fetched_at)) >= datetime('now', '-{int(max_age)} days')
         ORDER BY i.id
         {f'LIMIT {int(limit)}' if limit else ''}

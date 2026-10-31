@@ -24,6 +24,10 @@ def status(conn: sqlite3.Connection, max_age_days: int = 7) -> dict:
             f"-{int(max_age_days)} days",
         ),
         "extraction": {r[0]: r[1] for r in conn.execute("SELECT extraction, COUNT(*) FROM items GROUP BY 1")},
+        "media": {r[0]: r[1] for r in conn.execute("SELECT media, COUNT(*) FROM items GROUP BY 1")},
+        "trial_shows": [dict(r) for r in conn.execute(
+            "SELECT id, name, discovery_query, discovered_at FROM sources WHERE discovery='trial' AND enabled=1"
+        )],
         "avg_score_ms": one("SELECT CAST(AVG(duration_ms) AS INTEGER) FROM scores"),
         "last_runs": [
             {**dict(r), "stats": json.loads(r["stats"])}

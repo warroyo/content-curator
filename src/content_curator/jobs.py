@@ -71,6 +71,17 @@ def stories(settings: Settings) -> dict:
         conn.close()
 
 
+def discover(settings: Settings) -> dict:
+    """Find new podcast shows on Apple Podcasts and add them as trial sources."""
+    from content_curator.discover import discover_podcasts
+
+    conn = db.connect(settings.db_path)
+    try:
+        return discover_podcasts(conn, settings, load_interests(settings.config_dir))
+    finally:
+        conn.close()
+
+
 def score(settings: Settings, limit: int | None = None) -> dict:
     from content_curator.scoring import ModelUnavailable, score_pending
 
@@ -101,7 +112,11 @@ def curate(settings: Settings, dry_run: bool = True, extra_stats: dict | None = 
         for d in result.picks:
             buckets[d.bucket] = buckets.get(d.bucket, 0) + 1
         run.stats.update(candidates=len(candidates), picks=len(result.picks), buckets=buckets, **(extra_stats or {}))
-        path = report.write(settings.reports_dir, report.render(result, run.stats, dry_run=dry_run))
+        from content_curator.discover import trial_sources
+
+        path = report.write(
+            settings.reports_dir, report.render(result, run.stats, dry_run=dry_run, trials=trial_sources(conn))
+        )
         run.stats["report"] = path.name
         run.finish()
         return run.stats
@@ -134,6 +149,7 @@ JOBS: dict[str, Callable[..., dict]] = {
     "score": score,
     "curate": curate,
     "run": pipeline,
+    "discover": discover,
 }
 
 

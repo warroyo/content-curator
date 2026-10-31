@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 from content_curator.collectors.base import CollectResult, Collector, Entry
+from content_curator.collectors.podcast import PodcastCollector
 from content_curator.collectors.rss import RSSCollector
 
 COLLECTORS: dict[str, type[Collector]] = {
     "rss": RSSCollector,
+    "podcast": PodcastCollector,
 }
 
 

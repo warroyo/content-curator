@@ -121,6 +121,29 @@ MIGRATIONS: list[str] = [
         PRIMARY KEY (a, b)
     );
     """,
+    # 3: podcasts, Apple Podcasts links, discovered (trial) sources
+    """
+    ALTER TABLE sources ADD COLUMN apple_id INTEGER;
+    ALTER TABLE sources ADD COLUMN discovered_at TEXT;
+    ALTER TABLE sources ADD COLUMN discovery_query TEXT;
+
+    ALTER TABLE items ADD COLUMN media TEXT NOT NULL DEFAULT 'article';
+    ALTER TABLE items ADD COLUMN duration_s INTEGER;
+    ALTER TABLE items ADD COLUMN listen_url TEXT;
+    ALTER TABLE items ADD COLUMN audio_url TEXT;
+    ALTER TABLE items ADD COLUMN transcript_url TEXT;
+    ALTER TABLE items ADD COLUMN transcript_type TEXT;
+    """,
+    # 4: podcast discovery verdicts, so a rejected show is not judged again every week
+    """
+    CREATE TABLE show_judgements (
+        apple_id INTEGER PRIMARY KEY,
+        name TEXT NOT NULL,
+        fit INTEGER NOT NULL,
+        reason TEXT NOT NULL,
+        judged_at TEXT NOT NULL
+    );
+    """,
 ]
 
 

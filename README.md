@@ -2,7 +2,7 @@
 
 ## Overview
 
-A self-hosted curator that reads a few hundred feed items a day and picks the 5–10 worth your time. It collects RSS and Atom feeds, drops exact duplicates, has a local model score each item against an interest profile, and selects a small, diverse set with a reason for each pick. Phase 1a writes the picks to a markdown report; Phase 1b will publish them to Readwise Reader.
+A self-hosted curator that reads a few hundred feed items a day and picks the 5–10 worth your time. It collects RSS and Atom feeds and podcasts, finds new podcast shows on its own, drops duplicates, has a local model score each item against an interest profile, and selects a small, diverse set with a reason for each pick. Phase 1a writes the picks to a markdown report; Phase 1b will publish them to Readwise Reader.
 
 It runs as one container: a small service with an HTTP API, a built-in scheduler and Prometheus metrics. It sleeps between runs, using almost no CPU, and does its work overnight. The model is any OpenAI-compatible endpoint; in the home lab that is LiteLLM's `local-qwen` alias on `ubuntu-home`.
 
@@ -25,6 +25,7 @@ flowchart LR
 
 - The scheduler starts the nightly `run` job (collect, stories, score, curate) from `config/app.yaml`. The API starts the same jobs on demand and serves status, picks and item explanations.
 - `collect` fetches sources with conditional requests, gets full text from the feed or the page (respecting `robots.txt`), and marks items with the same URL, canonical URL or text as duplicates.
+- Podcast episodes are scored on show notes and published transcripts and linked to Apple Podcasts. A weekly `discover` job finds new shows and tries them.
 - `stories` embeds each fresh item with `local-embed` and groups articles about the same event, so one story yields one pick.
 - `score` sends each fresh item to the model and validates six 0–10 scores, topics and a one-line explanation. Scores are cached.
 - `curate` computes the weighted overall score in code, fills discovery slots, caps items per source and writes the report.
