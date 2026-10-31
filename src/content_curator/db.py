@@ -96,6 +96,31 @@ MIGRATIONS: list[str] = [
         PRIMARY KEY (run_id, item_id)
     );
     """,
+    # 2: embeddings and same-story grouping
+    """
+    CREATE TABLE embeddings (
+        item_id INTEGER PRIMARY KEY REFERENCES items(id),
+        model TEXT NOT NULL,
+        input_hash TEXT NOT NULL,
+        dim INTEGER NOT NULL,
+        vector BLOB NOT NULL,
+        created_at TEXT NOT NULL
+    );
+
+    ALTER TABLE items ADD COLUMN story_id INTEGER REFERENCES items(id);
+    CREATE INDEX items_story ON items(story_id);
+
+    CREATE TABLE story_judgements (
+        a INTEGER NOT NULL REFERENCES items(id),
+        b INTEGER NOT NULL REFERENCES items(id),
+        similarity REAL NOT NULL,
+        same INTEGER NOT NULL,
+        reason TEXT NOT NULL,
+        model TEXT NOT NULL,
+        judged_at TEXT NOT NULL,
+        PRIMARY KEY (a, b)
+    );
+    """,
 ]
 
 

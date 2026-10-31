@@ -18,6 +18,7 @@ class Settings(BaseModel):
     llm_api_key: str
     llm_model: str
     llm_timeout: float
+    embed_model: str = "local-embed"
     user_agent: str
     api_host: str = "127.0.0.1"
     api_port: int = 8090
@@ -33,6 +34,7 @@ class Settings(BaseModel):
             llm_api_key=os.environ.get("CURATOR_LLM_API_KEY", ""),
             llm_model=os.environ.get("CURATOR_LLM_MODEL", "local-qwen"),
             llm_timeout=float(os.environ.get("CURATOR_LLM_TIMEOUT", "300")),
+            embed_model=os.environ.get("CURATOR_EMBED_MODEL", "local-embed"),
             user_agent=os.environ.get(
                 "CURATOR_USER_AGENT", "content-curator/0.1 (+https://github.com/warroyo/content-curator)"
             ),
@@ -111,6 +113,21 @@ class Selection(BaseModel):
     words_per_minute: int = 230
 
 
+class Stories(BaseModel):
+    """Grouping items that cover the same story, by embedding similarity."""
+
+    enabled: bool = True
+    # Cosine similarity at or above which two items are the same story.
+    same_story: float = 0.85
+    # Pairs between borderline and same_story go to the chat model to decide;
+    # every pair inside one story must be at least this similar.
+    borderline: float = 0.75
+    # Most borderline pairs the chat model is asked about per run.
+    max_judgements: int = 40
+    # Words of each item's text embedded after its title: the lede carries the story.
+    embed_words: int = 300
+
+
 class Interests(BaseModel):
     groups: list[TopicGroup]
     exclusions: list[str] = Field(default_factory=list)
@@ -118,6 +135,7 @@ class Interests(BaseModel):
     discovery_notes: str = ""
     scoring: Scoring = Field(default_factory=Scoring)
     selection: Selection = Field(default_factory=Selection)
+    stories: Stories = Field(default_factory=Stories)
 
 
 class ScheduledJob(BaseModel):

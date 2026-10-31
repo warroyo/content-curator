@@ -60,6 +60,17 @@ def collect(settings: Settings, force: bool = False) -> dict:
         conn.close()
 
 
+def stories(settings: Settings) -> dict:
+    """Embed fresh items and group same-story coverage. Never fails the run: grouping is a refinement."""
+    from content_curator.stories import run_stories
+
+    conn = db.connect(settings.db_path)
+    try:
+        return run_stories(conn, settings, load_interests(settings.config_dir))
+    finally:
+        conn.close()
+
+
 def score(settings: Settings, limit: int | None = None) -> dict:
     from content_curator.scoring import ModelUnavailable, score_pending
 
@@ -99,22 +110,27 @@ def curate(settings: Settings, dry_run: bool = True, extra_stats: dict | None = 
 
 
 def pipeline(settings: Settings, dry_run: bool = True, force: bool = False) -> dict:
-    """The nightly job: collect, score, curate. A model outage stops it before curation."""
+    """The nightly job: collect, group stories, score, curate. A chat model outage stops it before curation."""
     collected = collect(settings, force=force)
+    grouped = stories(settings)
     scored = score(settings)
     extra = {
         "fetched_new": collected["new_items"], "fetch_failures": collected["fetch_failures"],
         "duplicates": collected["duplicates"], "scored": scored["scored"], "score_failures": scored["failures"],
         "scoring_s": scored["duration_s"], "prompt_tokens": scored["prompt_tokens"],
         "completion_tokens": scored["completion_tokens"],
+        "stories": grouped.get("stories", 0), "story_items": grouped.get("grouped_items", 0),
     }
+    if "model_unavailable" in grouped:
+        extra["stories_skipped"] = grouped["model_unavailable"]
     stats = curate(settings, dry_run=dry_run, extra_stats=extra)
-    stats["steps"] = {"collect": collected, "score": scored}
+    stats["steps"] = {"collect": collected, "stories": grouped, "score": scored}
     return stats
 
 
 JOBS: dict[str, Callable[..., dict]] = {
     "collect": collect,
+    "stories": stories,
     "score": score,
     "curate": curate,
     "run": pipeline,

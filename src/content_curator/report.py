@@ -24,11 +24,15 @@ def _pick(d: Decision) -> str:
         f"act {c.actionability:g} · disc {c.discovery_value:g}"
     )
     tags = ", ".join(f"`{t}`" for t in c.topics) or "none"
+    also = ""
+    if c.also:
+        links = ", ".join(f"[{src}]({url})" for src, _, url in c.also)
+        also = f"\nAlso covered by: {links}\n"
     return (
         f"### {d.rank}. [{c.title}]({c.url})\n\n"
         f"{' · '.join(meta)}  \n"
         f"**{c.overall}** overall, {d.bucket} ({d.reason}). {dims}. Topics: {tags}\n\n"
-        f"> {c.explanation}\n"
+        f"> {c.explanation}\n{also}"
     )
 
 

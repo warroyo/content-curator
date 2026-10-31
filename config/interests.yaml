@@ -69,3 +69,13 @@ selection:
   max_reading_minutes: null
   near_misses: 10
   words_per_minute: 230
+
+# Same-story grouping by embedding similarity (cosine, 0-1). Tune after a few runs:
+# the report lists each pick's other coverage, and story_judgements records every
+# borderline decision the chat model made.
+stories:
+  enabled: true
+  same_story: 0.85
+  borderline: 0.75
+  max_judgements: 40
+  embed_words: 300

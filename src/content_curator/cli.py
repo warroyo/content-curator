@@ -48,6 +48,8 @@ def main(argv: list[str] | None = None) -> int:
     s = sub.add_parser("collect", help="fetch due sources and extract new items")
     s.add_argument("--force", action="store_true", help="fetch every source, ignoring its interval")
 
+    sub.add_parser("stories", help="embed fresh items and group same-story coverage")
+
     s = sub.add_parser("score", help="score new items with the model")
     s.add_argument("--limit", type=int, help="score at most this many items")
 
@@ -79,6 +81,8 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         case "collect":
             return _job(settings, "collect", force=args.force)
+        case "stories":
+            return _job(settings, "stories")
         case "score":
             return _job(settings, "score", limit=args.limit)
         case "curate":

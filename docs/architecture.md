@@ -7,6 +7,7 @@
 | `collectors/` | One class per source type behind the `Collector` interface. Only `rss` exists; YouTube, podcasts, Hacker News and GitHub releases are later phases. |
 | `ingest.py` | Syncs `sources.yaml` into the database, runs collectors, extracts article text, marks exact duplicates. |
 | `normalize.py` | URL normalization and content hashing. |
+| `stories.py` | Embeds fresh items through `/v1/embeddings` (`local-embed`) and groups same-story coverage; borderline pairs go to the chat model. |
 | `scoring.py` | Builds the prompt from the interest profile, calls the model with a JSON schema response format, validates with Pydantic, caches by input hash. |
 | `select.py` | Deterministic selection: overall score, discovery slots, per-source cap, reading-time budget, near misses. |
 | `report.py` | Markdown report of picks and near misses. |
@@ -59,9 +60,17 @@ SQLite in WAL mode at `/data/curator.db`, migrated through `PRAGMA user_version`
 | `runs` | each job run with its stats |
 | `selections` | every pick and near miss per curate run, with bucket, score and reason |
 
+## Same-story grouping
+
+The nightly run embeds each fresh item (title plus the first 300 words) and stores the unit vector in `embeddings`. Pairs with cosine similarity of `same_story` or more are grouped; pairs between `borderline` and `same_story` are sent to the chat model, which answers "same specific event, or only the same topic". Its answers are cached in `story_judgements`. Groups are complete-linkage: every pair in a story must clear `borderline`, so A~B and B~C cannot pull in an unrelated C. A story keeps its id across nights.
+
+Selection takes one candidate per story, the best-scored item, and the report lists the rest as "Also covered by". Once publishing exists, a story with a published pick is never picked again.
+
+If the embedding model is down, grouping is skipped for that run and the rest of the run goes on.
+
 ## Deduplication
 
-An item is not inserted when its normalized URL, or its GUID within the same source, already exists. After text extraction, an item points at the earliest item that shares its canonical URL or its content hash (text of 100+ words, case and whitespace normalized). Semantic clustering is Phase 2.
+An item is not inserted when its normalized URL, or its GUID within the same source, already exists. After text extraction, an item points at the earliest item that shares its canonical URL or its content hash (text of 100+ words, case and whitespace normalized). Same-story grouping is the step above.
 
 ## Scoring
 

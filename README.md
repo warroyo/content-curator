@@ -15,14 +15,17 @@ flowchart LR
     API[HTTP API] --> J
   end
   J --> C[collect] --> DB[(SQLite /data)]
+  J --> ST[stories] <-->|embeddings| E[LiteLLM local-embed]
+  DB --- ST
   J --> S[score] <-->|JSON schema| M[LiteLLM local-qwen]
   J --> P[curate] --> R[report + picks]
   DB --- S
   DB --- P
 ```
 
-- The scheduler starts the nightly `run` job (collect, score, curate) from `config/app.yaml`. The API starts the same jobs on demand and serves status, picks and item explanations.
+- The scheduler starts the nightly `run` job (collect, stories, score, curate) from `config/app.yaml`. The API starts the same jobs on demand and serves status, picks and item explanations.
 - `collect` fetches sources with conditional requests, gets full text from the feed or the page (respecting `robots.txt`), and marks items with the same URL, canonical URL or text as duplicates.
+- `stories` embeds each fresh item with `local-embed` and groups articles about the same event, so one story yields one pick.
 - `score` sends each fresh item to the model and validates six 0–10 scores, topics and a one-line explanation. Scores are cached.
 - `curate` computes the weighted overall score in code, fills discovery slots, caps items per source and writes the report.
 
@@ -51,7 +54,7 @@ API and CLI reference: [docs/architecture.md](docs/architecture.md#api).
 
 ## Repo structure
 
-- `src/content_curator/` - the application: `service.py` (API, scheduler), `jobs.py`, `collectors/`, `ingest.py`, `scoring.py`, `select.py`, `report.py`, `cli.py`
+- `src/content_curator/` - the application: `service.py` (API, scheduler), `jobs.py`, `stories.py`, `collectors/`, `ingest.py`, `scoring.py`, `select.py`, `report.py`, `cli.py`
 - `config/` - `app.yaml` (schedule), `sources.yaml` (source registry), `interests.yaml` (profile, weights, selection budget)
 - `tests/` - unit and mocked integration tests, run in the `test` image target
 - `Dockerfile`, `compose.yaml`, `Makefile` - build, test and run everything in Docker

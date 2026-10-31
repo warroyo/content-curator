@@ -7,6 +7,7 @@
 | `CURATOR_LLM_BASE_URL` | `http://127.0.0.1:4000/v1` | OpenAI-compatible base URL |
 | `CURATOR_LLM_API_KEY` | empty | bearer key for that endpoint |
 | `CURATOR_LLM_MODEL` | `local-qwen` | model name sent in each request |
+| `CURATOR_EMBED_MODEL` | `local-embed` | embedding model for same-story grouping |
 | `CURATOR_LLM_TIMEOUT` | `300` | seconds per request |
 | `CURATOR_LOG_LEVEL` | `INFO` | log level; logs are JSON on stderr |
 | `CURATOR_DATA_DIR` | `/data` in the image | database, lock and reports |
@@ -68,5 +69,15 @@ Removing a source from the file disables it in the database; its items stay. `im
 | `max_reading_minutes` | null | optional reading-time budget |
 | `near_misses` | 10 | near misses listed in the report |
 | `words_per_minute` | 230 | reading speed for time estimates |
+
+- `stories`: same-story grouping.
+
+| Key | Default | Meaning |
+|---|---|---|
+| `enabled` | true | turn grouping off |
+| `same_story` | 0.85 | cosine similarity at or above which two items are the same story |
+| `borderline` | 0.75 | pairs from here up to `same_story` are decided by the chat model; every pair in a story must clear it |
+| `max_judgements` | 40 | chat-model decisions per run |
+| `embed_words` | 300 | words after the title that are embedded |
 
 A discovery pick needs `outside_interests`, discovery value 7+, and depth and source quality 5+.

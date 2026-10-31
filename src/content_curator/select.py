@@ -33,8 +33,11 @@ class Candidate:
     actionability: float
     discovery_value: float
     outside_interests: bool
+    story_id: int | None = None
     overall: float = 0.0
     minutes: int = 0
+    # Other items covering the same story, best first: (source_name, title, url).
+    also: list[tuple[str, str, str]] = field(default_factory=list)
 
     @property
     def discovery_score(self) -> float:
@@ -66,6 +69,7 @@ def select(candidates: list[Candidate], sel: Selection, weights: Weights) -> Res
         if c.confidence == "low":
             c.overall = round(c.overall - LOW_CONFIDENCE_PENALTY, 2)
         c.minutes = max(1, round(c.word_count / sel.words_per_minute)) if c.word_count else 0
+    candidates = collapse_stories(candidates)
 
     per_source: Counter[str] = Counter()
     minutes_left = sel.max_reading_minutes
@@ -127,18 +131,35 @@ def select(candidates: list[Candidate], sel: Selection, weights: Weights) -> Res
     return Result(picks=picks, near_misses=near_misses[: sel.near_misses])
 
 
+def collapse_stories(candidates: list[Candidate]) -> list[Candidate]:
+    """Keep one candidate per story: the best-scored item, with the others listed as other coverage."""
+    stories: dict[int, list[Candidate]] = {}
+    for c in candidates:
+        stories.setdefault(c.story_id if c.story_id is not None else -c.item_id, []).append(c)
+    out = []
+    for group in stories.values():
+        group.sort(key=lambda c: (-c.overall, -c.depth, c.item_id))
+        primary = group[0]
+        primary.also = [(c.source_name, c.title, c.url) for c in group[1:]]
+        out.append(primary)
+    return out
+
+
 def load_candidates(conn: sqlite3.Connection, interests: Interests) -> list[Candidate]:
     """Scored, non-duplicate items in the freshness window that were never picked before."""
     rows = conn.execute(
         f"""
         SELECT i.id, i.source_id, s.name AS source_name, i.title, i.url, i.published_at, i.word_count,
-               sc.*
+               i.story_id, sc.*
         FROM items i
         JOIN scores sc ON sc.item_id = i.id
         JOIN sources s ON s.id = i.source_id
         WHERE i.duplicate_of IS NULL
           AND datetime(COALESCE(i.published_at, i.fetched_at)) >= datetime('now', '-{int(interests.selection.max_age_days)} days')
-          AND i.id NOT IN (SELECT item_id FROM selections WHERE selected = 1 AND dry_run = 0)
+          -- never pick an item, or another article about its story, that was already published
+          AND COALESCE(i.story_id, i.id) NOT IN (
+              SELECT COALESCE(p.story_id, p.id) FROM selections sel JOIN items p ON p.id = sel.item_id
+              WHERE sel.selected = 1 AND sel.dry_run = 0)
         """
     ).fetchall()
     return [
@@ -148,7 +169,7 @@ def load_candidates(conn: sqlite3.Connection, interests: Interests) -> list[Cand
             explanation=r["explanation"], topics=json.loads(r["topics"]), relevance=r["relevance"],
             novelty=r["novelty"], depth=r["depth"], source_quality=r["source_quality"],
             actionability=r["actionability"], discovery_value=r["discovery_value"],
-            outside_interests=bool(r["outside_interests"]),
+            outside_interests=bool(r["outside_interests"]), story_id=r["story_id"],
         )
         for r in rows
     ]
