@@ -39,13 +39,15 @@ class FakeJudge:
         return SameStory(same_story=self.answer, reason="test")
 
 
-def seed(conn, titles):
-    conn.execute("INSERT OR IGNORE INTO sources(id, name, url, type) VALUES ('s', 'S', 'https://s.test', 'rss')")
-    for t in titles:
+def seed(conn, titles, same_source=False):
+    for k, t in enumerate(titles):
+        src = "s" if same_source else f"s{k}"
+        conn.execute("INSERT OR IGNORE INTO sources(id, name, url, type) VALUES (?, ?, 'https://s.test', 'rss')",
+                     (src, src))
         conn.execute(
             "INSERT INTO items(source_id, url, normalized_url, title, fetched_at, published_at, content_text, extraction)"
-            " VALUES ('s', ?, ?, ?, ?, ?, 'body text', 'page')",
-            (f"https://s.test/{t}", f"https://s.test/{t}", t, db.now(), db.now()),
+            " VALUES (?, ?, ?, ?, ?, ?, 'body text', 'page')",
+            (src, f"https://s.test/{t}", f"https://s.test/{t}", t, db.now(), db.now()),
         )
 
 
@@ -56,7 +58,7 @@ def stories_by_title(conn):
 @pytest.fixture
 def interests(settings):
     i = load_interests(settings.config_dir)
-    i.stories.same_story, i.stories.borderline = 0.85, 0.75
+    i.stories.same_story, i.stories.borderline, i.stories.max_judgements = 0.85, 0.75, 40
     return i
 
 
@@ -88,6 +90,15 @@ def test_judge_can_keep_borderline_apart(conn, settings, interests):
     seed(conn, ["a", "b"])
     emb = FakeEmbedder({"a": angle(0), "b": angle(37)})
     run_stories(conn, settings, interests, embedder=emb, judge=FakeJudge(False))
+    assert set(stories_by_title(conn).values()) == {None}
+
+
+def test_same_source_pair_always_judged(conn, settings, interests):
+    seed(conn, ["updates-fri", "updates-thu"], same_source=True)
+    emb = FakeEmbedder({"updates-fri": angle(0), "updates-thu": angle(5)})  # 0.996, above same_story
+    judge = FakeJudge(False)
+    run_stories(conn, settings, interests, embedder=emb, judge=judge)
+    assert len(judge.calls) == 1
     assert set(stories_by_title(conn).values()) == {None}
 
 

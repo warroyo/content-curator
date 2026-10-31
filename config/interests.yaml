@@ -70,12 +70,13 @@ selection:
   near_misses: 10
   words_per_minute: 230
 
-# Same-story grouping by embedding similarity (cosine, 0-1). Tune after a few runs:
-# the report lists each pick's other coverage, and story_judgements records every
-# borderline decision the chat model made.
+# Same-story grouping by embedding similarity (cosine, 0-1). Embeddings find candidate
+# pairs; the chat model decides most of them, because similarity alone does not separate
+# "same event" from "same topic" (calibration 2026-10-31: true pairs 0.65-0.87, false
+# pairs up to 0.87). story_judgements records every decision.
 stories:
   enabled: true
-  same_story: 0.85
-  borderline: 0.75
-  max_judgements: 40
+  same_story: 0.92
+  borderline: 0.62
+  max_judgements: 80
   embed_words: 300

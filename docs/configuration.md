@@ -75,9 +75,9 @@ Removing a source from the file disables it in the database; its items stay. `im
 | Key | Default | Meaning |
 |---|---|---|
 | `enabled` | true | turn grouping off |
-| `same_story` | 0.85 | cosine similarity at or above which two items are the same story |
-| `borderline` | 0.75 | pairs from here up to `same_story` are decided by the chat model; every pair in a story must clear it |
-| `max_judgements` | 40 | chat-model decisions per run |
+| `same_story` | 0.92 | cosine similarity at or above which two items from different sources are the same story without asking |
+| `borderline` | 0.62 | pairs from here up to `same_story`, and any same-source pair above it, are decided by the chat model; every pair in a story must clear it |
+| `max_judgements` | 80 | chat-model decisions per run |
 | `embed_words` | 300 | words after the title that are embedded |
 
 A discovery pick needs `outside_interests`, discovery value 7+, and depth and source quality 5+.

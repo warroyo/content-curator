@@ -147,7 +147,7 @@ def group_stories(conn: sqlite3.Connection, settings: Settings, interests: Inter
     cfg = interests.stories
     rows = conn.execute(
         f"""
-        SELECT i.id, i.title, i.content_text, i.summary, i.story_id, s.name AS source_name, e.vector
+        SELECT i.id, i.source_id, i.title, i.content_text, i.summary, i.story_id, s.name AS source_name, e.vector
         FROM items i JOIN embeddings e ON e.item_id = i.id JOIN sources s ON s.id = i.source_id
         WHERE i.duplicate_of IS NULL AND e.model = ?
           AND datetime(COALESCE(i.published_at, i.fetched_at)) >= datetime('now', '-{int(interests.selection.max_age_days)} days')
@@ -188,7 +188,10 @@ def group_stories(conn: sqlite3.Connection, settings: Settings, interests: Inter
         if cross.min() < cfg.borderline:
             continue
         sim = float(sims[a, b])
-        if sim < cfg.same_story:
+        # A source's recurring series ("Security updates for Friday") embeds as near-identical
+        # without being one story, so two items from one source always go to the judge.
+        same_source = rows[a]["source_id"] == rows[b]["source_id"]
+        if sim < cfg.same_story or same_source:
             key = (ids[a], ids[b])
             if key not in judge_cache:
                 if judge is None or stats["judged"] >= cfg.max_judgements:

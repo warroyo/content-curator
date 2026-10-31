@@ -29,3 +29,7 @@ The container uses `network_mode: host` to reach LiteLLM on `127.0.0.1:4000` wit
 ## 2026-10-31: same-story grouping with a lab-wide embedding model
 
 The embedding model is Qwen3-Embedding-0.6B on the EVO-X2, behind LiteLLM's `local-embed` alias, set up in dev-environment as a lab-wide service (RAG will use it too). It sits in a persistent, non-exclusive llama-swap group, so an embedding call never unloads Flash-Next. Vectors live in SQLite and are compared with numpy; about 250 items a day needs no vector database. Grouping uses fixed thresholds plus the chat model for the borderline band, with complete linkage to avoid chaining. Rejected: running the embedding model on `ubuntu-home`'s CPU (the box is already the lab's bottleneck), and a vector database (no need at this scale). The thresholds are first guesses, to be tuned on real runs.
+
+## 2026-10-31: embeddings find candidates, the chat model decides
+
+Calibration on 177 items (15,576 pairs) with Qwen3-Embedding-0.6B: median similarity 0.27, true same-story pairs between 0.65 and 0.87, false pairs up to 0.87 (LWN's daily "Security updates for Friday/Thursday" at 0.873, two unrelated OpenAI customer stories at 0.813). No threshold separates them. So pairs from 0.62 up go to the chat model, auto-merge is only for near-duplicates at 0.92 from different sources, and two items from one source are always judged. First run: 47 judgements in 4.5 minutes, 7 stories of 17 items, every merge and every high-similarity rejection correct on inspection.

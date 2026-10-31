@@ -62,7 +62,7 @@ SQLite in WAL mode at `/data/curator.db`, migrated through `PRAGMA user_version`
 
 ## Same-story grouping
 
-The nightly run embeds each fresh item (title plus the first 300 words) and stores the unit vector in `embeddings`. Pairs with cosine similarity of `same_story` or more are grouped; pairs between `borderline` and `same_story` are sent to the chat model, which answers "same specific event, or only the same topic". Its answers are cached in `story_judgements`. Groups are complete-linkage: every pair in a story must clear `borderline`, so A~B and B~C cannot pull in an unrelated C. A story keeps its id across nights.
+The nightly run embeds each fresh item (title plus the first 300 words) and stores the unit vector in `embeddings`. Pairs from different sources with cosine similarity of `same_story` or more are grouped; pairs between `borderline` and `same_story`, and same-source pairs, are sent to the chat model, which answers "same specific event, or only the same topic". Its answers are cached in `story_judgements`. Groups are complete-linkage: every pair in a story must clear `borderline`, so A~B and B~C cannot pull in an unrelated C. A story keeps its id across nights.
 
 Selection takes one candidate per story, the best-scored item, and the report lists the rest as "Also covered by". Once publishing exists, a story with a published pick is never picked again.
 

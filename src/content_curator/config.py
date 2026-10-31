@@ -117,13 +117,15 @@ class Stories(BaseModel):
     """Grouping items that cover the same story, by embedding similarity."""
 
     enabled: bool = True
-    # Cosine similarity at or above which two items are the same story.
-    same_story: float = 0.85
+    # Cosine similarity at or above which two items from different sources are the same
+    # story without asking. Measured on Qwen3-Embedding-0.6B (2026-10-31): true same-story
+    # pairs ran from 0.65 to 0.87 and false ones up to 0.87, so this is near-duplicates only.
+    same_story: float = 0.92
     # Pairs between borderline and same_story go to the chat model to decide;
     # every pair inside one story must be at least this similar.
-    borderline: float = 0.75
+    borderline: float = 0.62
     # Most borderline pairs the chat model is asked about per run.
-    max_judgements: int = 40
+    max_judgements: int = 80
     # Words of each item's text embedded after its title: the lede carries the story.
     embed_words: int = 300
 
