@@ -74,7 +74,7 @@ def test_token_required_when_set(settings, fake_jobs):
     gate, _ = fake_jobs
     gate.set()
     settings.api_token = "s3cret"
-    with TestClient(create_app(settings, scheduler_enabled=False)) as client:
+    with TestClient(create_app(settings, runner=jobs.JobRunner(settings), scheduler_enabled=False)) as client:
         assert client.post("/api/jobs/run").status_code == 401
         assert client.post("/api/jobs/run", headers={"Authorization": "Bearer s3cret"}).status_code == 202
         assert client.get("/api/status").status_code == 200  # reads stay open
@@ -101,3 +101,17 @@ def test_schedule_from_config(settings):
     scheduler = build_scheduler(settings, jobs.JobRunner(settings))
     [job] = scheduler.get_jobs()
     assert job.name == "run" and str(job.trigger.timezone) == "America/Denver"
+
+
+def test_isolated_job_runs_in_child_process(settings):
+    runner = jobs.JobRunner(settings, isolate=True)
+    stats = runner.run("curate")
+    assert stats["candidates"] == 0 and stats["report"].endswith(".md")
+    assert runner.state["curate"].last_status == "ok"
+
+
+def test_isolated_job_busy_when_locked(settings):
+    runner = jobs.JobRunner(settings, isolate=True)
+    with jobs.data_lock(settings):
+        with pytest.raises(jobs.JobBusy):
+            runner.run("curate")

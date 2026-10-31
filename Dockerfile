@@ -1,9 +1,10 @@
 # syntax=docker/dockerfile:1
-# Multi-arch (linux/amd64, linux/arm64). Targets: runtime (default) and test.
+# Multi-arch (linux/amd64, linux/arm64), Alpine-based: every dependency ships musllinux
+# wheels, so nothing compiles. Targets: runtime (default) and test.
 
 FROM ghcr.io/astral-sh/uv:0.12 AS uv
 
-FROM python:3.12-slim AS base
+FROM python:3.12-alpine AS base
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     UV_COMPILE_BYTECODE=1 \
@@ -32,10 +33,10 @@ COPY config ./config
 ENV PATH=/app/.venv/bin:$PATH
 CMD ["pytest", "-q"]
 
-FROM python:3.12-slim AS runtime
+FROM python:3.12-alpine AS runtime
 LABEL org.opencontainers.image.source="https://github.com/warroyo/content-curator" \
       org.opencontainers.image.description="Self-hosted content curator"
-RUN useradd --system --uid 1000 --home-dir /data curator \
+RUN adduser -D -H -u 1000 -h /data curator \
     && mkdir -p /data /config && chown curator /data
 COPY --from=build /app/.venv /app/.venv
 COPY config /config.example

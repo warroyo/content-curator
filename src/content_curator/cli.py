@@ -9,17 +9,12 @@ import os
 import sys
 from pathlib import Path
 
-from content_curator import db, ingest, logs
+from content_curator import db, logs
 from content_curator import status as queries
 from content_curator.config import Settings, load_interests
-from content_curator.jobs import JobBusy, JobRunner
-from content_curator.opml import merge_into_sources
-from content_curator.scoring import ModelUnavailable
+from content_curator.jobs import EX_TEMPFAIL, EX_UNAVAILABLE, EX_USAGE, JobBusy, JobRunner
 
 log = logging.getLogger("curator")
-
-# sysexits.h codes, so callers can tell outcomes apart.
-EX_USAGE, EX_UNAVAILABLE, EX_TEMPFAIL = 64, 69, 75
 
 
 def _print(obj) -> None:
@@ -27,6 +22,8 @@ def _print(obj) -> None:
 
 
 def _job(settings: Settings, name: str, **kwargs) -> int:
+    from content_curator.scoring import ModelUnavailable
+
     try:
         _print(JobRunner(settings).run(name, **kwargs))
     except JobBusy as e:
@@ -93,10 +90,14 @@ def main(argv: list[str] | None = None) -> int:
             _print(queries.status(conn, load_interests(settings.config_dir).selection.max_age_days))
             return 0
         case "import-opml":
+            from content_curator.opml import merge_into_sources
+
             added, skipped = merge_into_sources(Path(args.file), settings.config_dir / "sources.yaml")
             _print({"added": added, "already_present": skipped})
             return 0
         case "add-url":
+            from content_curator import ingest
+
             conn = db.connect(settings.db_path)
             item_id = ingest.ingest_url(conn, settings, args.url, args.title)
             _print({"item_id": item_id, "status": "added" if item_id else "already known"})

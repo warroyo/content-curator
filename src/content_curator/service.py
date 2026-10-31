@@ -14,7 +14,7 @@ from fastapi.responses import PlainTextResponse
 from prometheus_client import make_asgi_app
 from pydantic import BaseModel
 
-from content_curator import __version__, db, ingest
+from content_curator import __version__, db
 from content_curator import status as queries
 from content_curator.config import Settings, load_app_config, load_interests
 from content_curator.jobs import JOBS, JobBusy, JobRunner
@@ -51,7 +51,8 @@ def build_scheduler(settings: Settings, runner: JobRunner) -> BackgroundSchedule
 
 
 def create_app(settings: Settings, runner: JobRunner | None = None, scheduler_enabled: bool = True) -> FastAPI:
-    runner = runner or JobRunner(settings)
+    # Jobs run in child processes, so this process stays small between runs.
+    runner = runner or JobRunner(settings, isolate=True)
     scheduler = build_scheduler(settings, runner) if scheduler_enabled else None
 
     @asynccontextmanager
@@ -139,6 +140,8 @@ def create_app(settings: Settings, runner: JobRunner | None = None, scheduler_en
 
     @app.post("/api/urls", status_code=201, dependencies=[Depends(authorized)])
     def add_url(req: UrlRequest, c=Depends(conn)):
+        from content_curator import ingest
+
         item_id = ingest.ingest_url(c, settings, req.url, req.title)
         if item_id is None:
             raise HTTPException(409, "URL already known")
