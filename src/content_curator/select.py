@@ -86,7 +86,7 @@ def select(candidates: list[Candidate], sel: Selection, weights: Weights) -> Res
     skipped: list[Decision] = []
     taken: set[int] = set()
 
-    def try_take(c: Candidate, bucket: str, reason: str) -> bool:
+    def try_take(c: Candidate, bucket: str, reason: str, use_reading_budget: bool = True) -> bool:
         nonlocal minutes_left
         if per_source[c.source_id] >= sel.max_per_source:
             skipped.append(Decision(c, False, "skipped", f"source cap ({sel.max_per_source}/day) reached"))
@@ -95,16 +95,33 @@ def select(candidates: list[Candidate], sel: Selection, weights: Weights) -> Res
         if media_cap is not None and per_media[c.media] >= media_cap:
             skipped.append(Decision(c, False, "skipped", f"{c.media} cap ({media_cap}/day) reached"))
             return False
-        if minutes_left is not None and c.minutes > minutes_left:
+        if use_reading_budget and minutes_left is not None and c.minutes > minutes_left:
             skipped.append(Decision(c, False, "skipped", f"{c.minutes} min exceeds remaining reading budget"))
             return False
         per_source[c.source_id] += 1
         per_media[c.media] += 1
-        if minutes_left is not None:
+        if use_reading_budget and minutes_left is not None:
             minutes_left -= c.minutes
         taken.add(c.item_id)
         picks.append(Decision(c, True, bucket, reason))
         return True
+
+    # Reserved slots (a daily listen) come on top of daily_count and the reading budget: they are for
+    # a different time of day, and a good episode should not have to beat the day's best articles.
+    for media, slot in sel.reserved.items():
+        best = sorted((c for c in candidates if c.media == media and c.overall >= slot.min_score),
+                      key=lambda c: (-c.overall, -c.depth))
+        filled = 0
+        for c in best:
+            if filled >= slot.slots:
+                break
+            if try_take(c, "listen" if media == "podcast" else media,
+                        f"reserved {media} slot, overall {c.overall}", use_reading_budget=False):
+                filled += 1
+    reserved_buckets = {"listen" if m == "podcast" else m for m in sel.reserved}
+
+    def counted() -> int:
+        return sum(p.bucket not in reserved_buckets for p in picks)
 
     n_discovery = round(sel.daily_count * sel.discovery_share)
     discovery = sorted((c for c in candidates if is_discovery(c)), key=lambda c: -c.discovery_score)
@@ -115,7 +132,7 @@ def select(candidates: list[Candidate], sel: Selection, weights: Weights) -> Res
 
     core = sorted(candidates, key=lambda c: (-c.overall, -c.depth, -c.relevance))
     for c in core:
-        if len(picks) >= sel.daily_count:
+        if counted() >= sel.daily_count:
             break
         if c.item_id in taken:
             continue
@@ -123,8 +140,10 @@ def select(candidates: list[Candidate], sel: Selection, weights: Weights) -> Res
             break
         try_take(c, "core", f"overall {c.overall}")
 
-    # Discovery slots are filled first so core picks cannot crowd them out, but they read last.
-    picks.sort(key=lambda d: (d.bucket == "discovery", -d.candidate.overall))
+    # Reserved and discovery slots are filled first so core picks cannot crowd them out, but they
+    # read last: core, then discovery, then the listen.
+    order = {"core": 0, "discovery": 1}
+    picks.sort(key=lambda d: (order.get(d.bucket, 2), -d.candidate.overall))
     for rank, d in enumerate(picks, 1):
         d.rank = rank
 

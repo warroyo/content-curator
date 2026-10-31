@@ -104,6 +104,11 @@ class Scoring(BaseModel):
     full_text_min_words: int = 250
 
 
+class ReservedSlot(BaseModel):
+    slots: int = 1
+    min_score: float = 6.0
+
+
 class Selection(BaseModel):
     daily_count: int = 8
     discovery_share: float = 0.25
@@ -115,6 +120,9 @@ class Selection(BaseModel):
     words_per_minute: int = 230
     # Most picks per media type per run; types not listed are only limited by daily_count.
     max_per_media: dict[str, int] = Field(default_factory=lambda: {"podcast": 2})
+    # Slots kept for a media type on top of daily_count, filled by its best item at min_score or more,
+    # left empty otherwise. A podcast slot is the day's listen.
+    reserved: dict[str, ReservedSlot] = Field(default_factory=lambda: {"podcast": ReservedSlot()})
 
 
 class Stories(BaseModel):

@@ -75,7 +75,7 @@ If the embedding model is down, grouping is skipped for that run and the rest of
 
 A `podcast` source is an RSS feed. Each episode keeps its duration, show notes, audio URL and, when the feed has a Podcasting 2.0 `podcast:transcript` tag, the transcript (preferring text, VTT or SRT over HTML). No audio is downloaded or transcribed. An episode is scored on its show notes plus the transcript; with notes only it is low confidence. An item whose link is the audio file or the show's home page is keyed by its GUID.
 
-Each new episode gets an Apple Podcasts link: the show is found once by searching its name and matching the feed URL, then the show's recent episodes are looked up and matched by `episodeGuid`, which is the RSS GUID. The report links the episode to Apple Podcasts and to its page. Selection counts a podcast's length in minutes of audio and allows at most `max_per_media.podcast` episodes a day.
+Each new episode gets an Apple Podcasts link: the show is found once by searching its name and matching the feed URL, then the show's recent episodes are looked up and matched by `episodeGuid`, which is the RSS GUID. The report links the episode to Apple Podcasts and to its page. Selection counts a podcast's length in minutes of audio and allows at most `max_per_media.podcast` episodes a day. One reserved slot, on top of the daily reads, goes to the best episode at 6.0 or more: the day's listen.
 
 ### Discovery
 

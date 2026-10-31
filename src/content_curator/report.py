@@ -56,7 +56,11 @@ def render(result: Result, stats: dict, dry_run: bool, trials: list[dict] | None
         "## Picks",
         "",
     ]
-    lines += [_pick(d) for d in result.picks] or ["No item cleared the threshold.", ""]
+    reads = [d for d in result.picks if d.bucket != "listen"]
+    listens = [d for d in result.picks if d.bucket == "listen"]
+    lines += [_pick(d) for d in reads] or ["No item cleared the threshold.", ""]
+    if listens:
+        lines += ["## Today's listen", ""] + [_pick(d) for d in listens]
     lines += ["## Near misses", "", "| Score | Item | Source | Why not |", "|---|---|---|---|"]
     for d in result.near_misses:
         c = d.candidate

@@ -155,10 +155,28 @@ def cand(i, media="article", score=8, duration=None, trial=False):
 def test_media_cap_and_listening_time():
     w = Weights(relevance=1, novelty=0, depth=0, source_quality=0, actionability=0, discovery_value=0)
     cands = [cand(i, "podcast", 9, 3600) for i in range(3)] + [cand(9, "article", 7)]
-    r = select(cands, Selection(daily_count=5, discovery_share=0, min_score=5, max_per_media={"podcast": 2}), w)
+    r = select(cands, Selection(daily_count=5, discovery_share=0, min_score=5, max_per_media={"podcast": 2},
+                                reserved={}), w)
     assert [d.candidate.media for d in r.picks] == ["podcast", "podcast", "article"]
     assert r.picks[0].candidate.minutes == 60
     assert any("podcast cap" in d.reason for d in r.near_misses)
+
+
+def test_reserved_listen_slot():
+    from content_curator.config import ReservedSlot
+
+    w = Weights(relevance=1, novelty=0, depth=0, source_quality=0, actionability=0, discovery_value=0)
+    articles = [cand(i, "article", 9) for i in range(5)]
+    sel = Selection(daily_count=3, discovery_share=0, min_score=5, max_reading_minutes=15,
+                    reserved={"podcast": ReservedSlot(slots=1, min_score=6)})
+    # The episode loses to every article on score and is longer than the reading budget, but gets the slot.
+    r = select(articles + [cand(20, "podcast", 6.5, 3600), cand(21, "podcast", 6.2, 1800)], sel, w)
+    assert [d.bucket for d in r.picks] == ["core", "core", "core", "listen"]
+    assert r.picks[-1].candidate.item_id == 20
+
+    # Nothing clears min_score: the slot stays empty and the reads are unaffected.
+    r = select(articles + [cand(22, "podcast", 5.5, 1800)], sel, w)
+    assert [d.bucket for d in r.picks] == ["core", "core", "core"]
 
 
 def search_handler(results):

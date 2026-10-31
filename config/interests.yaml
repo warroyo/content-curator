@@ -72,6 +72,9 @@ selection:
   # Most picks per media type per run.
   max_per_media:
     podcast: 2
+  # On top of daily_count: the day's listen, the best episode at min_score or more, else none.
+  reserved:
+    podcast: {slots: 1, min_score: 6.0}
 
 # Same-story grouping by embedding similarity (cosine, 0-1). Embeddings find candidate
 # pairs; the chat model decides most of them, because similarity alone does not separate

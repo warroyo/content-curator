@@ -82,6 +82,7 @@ Removing a source from the file disables it in the database; its items stay. `im
 | `embed_words` | 300 | words after the title that are embedded |
 
 - `selection.max_per_media`: most picks per media type per run, default `{podcast: 2}`.
+- `selection.reserved`: slots per media type on top of `daily_count` and outside the reading budget, filled by the best item at `min_score` or more and left empty otherwise. Default `{podcast: {slots: 1, min_score: 6.0}}`: the day's listen, shown under "Today's listen" in the report.
 - `podcast_discovery`: weekly Apple Podcasts discovery.
 
 | Key | Default | Meaning |

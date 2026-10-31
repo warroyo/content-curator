@@ -45,3 +45,7 @@ Apple's keyword search ranks by relevance, not date, and its results for a topic
 ## 2026-10-31: thinking stays on
 
 Turning off Qwen's thinking would cut scoring time about 3x, but the run is overnight and time does not matter; quality does. Revisit only if the source list grows enough to push the run past morning.
+
+## 2026-10-31: a reserved daily listen
+
+On the first run with podcasts, no episode was picked: most feeds give only show notes, so episodes are scored low-confidence and lose to the day's best articles. Podcasts are listened to at other times (commute, chores), so they should not compete for reading slots. One slot a day, on top of `daily_count` and outside the reading budget, goes to the best episode at 6.0 or more; with none, it stays empty. Episodes can still win reading slots on score, up to `max_per_media.podcast`.
