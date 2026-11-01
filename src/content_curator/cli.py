@@ -98,14 +98,9 @@ def main(argv: list[str] | None = None) -> int:
             _print(queries.status(conn, load_interests(settings.config_dir).selection.max_age_days))
             return 0
         case "import-opml":
-            from content_curator.config import config_file
             from content_curator.opml import merge_into_sources
 
-            target = config_file(settings.config_dir, "sources")
-            if target.suffix != ".yaml":
-                log.error("import-opml writes a YAML file; %s is not one. Import locally, then copy.", target)
-                return EX_USAGE
-            added, skipped = merge_into_sources(Path(args.file), target)
+            added, skipped = merge_into_sources(Path(args.file), settings.config_dir / "sources.yaml")
             _print({"added": added, "already_present": skipped})
             return 0
         case "add-url":

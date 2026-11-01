@@ -58,7 +58,7 @@ API and CLI reference: [docs/architecture.md](docs/architecture.md#api).
 ## Repo structure
 
 - `src/content_curator/` - the application: `service.py` (API, scheduler), `jobs.py`, `stories.py`, `collectors/`, `ingest.py`, `scoring.py`, `select.py`, `publish.py`, `report.py`, `cli.py`
-- `config/` - defaults for local runs: `app.yaml` (schedule, publishing), `sources.yaml` (source registry), `interests.yaml` (profile, weights, selection budget). A deployment can point at its own, including markdown notes ([docs/configuration.md](docs/configuration.md))
+- `config/` - defaults for local runs: `app.yaml` (schedule, publishing), `sources.yaml` (source registry), `interests.yaml` (profile, weights, selection budget). A deployment mounts its own at `/config`
 - `.github/workflows/image.yaml` - tests, then publishes `ghcr.io/warroyo/content-curator` on pushes to main
 - `tests/` - unit and mocked integration tests, run in the `test` image target
 - `Dockerfile`, `compose.yaml`, `Makefile` - build, test and run everything in Docker
