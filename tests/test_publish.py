@@ -139,3 +139,16 @@ def test_note_carries_trial_and_other_coverage(conn):
     note = publish.note_for(d.candidate)
     assert "on trial" in note and "Other (https://o.test/a)" in note
     assert "ai-trial-show" in publish.tags_for(d)
+
+
+def test_saved_lowest_rank_first_so_best_is_on_top(conn):
+    fake = FakeRaindrop()
+    publish.publish(conn, run_id(conn), [pick(conn, 1), pick(conn, 2), pick(conn, 3)], Publish(), client_for(fake))
+    assert [r["title"] for r in fake.created] == ["Item 3", "Item 2", "Item 1"]
+
+
+def test_excerpt_ends_at_a_sentence():
+    text = "First sentence here. " * 30
+    out = publish.sentences(text)
+    assert len(out) <= 300 and out.endswith(".")
+    assert publish.sentences("word " * 100).endswith("…")

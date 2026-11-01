@@ -115,6 +115,17 @@ def note_for(c: Candidate) -> str:
     return "\n\n".join(p for p in parts if p)
 
 
+def sentences(text: str, limit: int = 300) -> str:
+    """Whole sentences up to about `limit` characters, so an excerpt never stops mid-word."""
+    text = " ".join(text.split())
+    if len(text) <= limit:
+        return text
+    cut = max(text.rfind(". ", 0, limit), text.rfind("? ", 0, limit), text.rfind("! ", 0, limit))
+    if cut > 0:
+        return text[: cut + 1]
+    return text[: text.rfind(" ", 0, limit)].rstrip(",;:") + "…"
+
+
 def raindrop_for(d: Decision, collection: int, parsed: dict) -> dict:
     c = d.candidate
     body = {
@@ -123,8 +134,6 @@ def raindrop_for(d: Decision, collection: int, parsed: dict) -> dict:
         "note": note_for(c),
         "tags": tags_for(d),
         "collection": {"$id": collection},
-        # Raindrop lists the newest first; keep the curator's order within a run.
-        "order": d.rank - 1,
     }
     if parsed.get("type") in ("article", "video", "audio", "document"):
         body["type"] = parsed["type"]
@@ -132,7 +141,7 @@ def raindrop_for(d: Decision, collection: int, parsed: dict) -> dict:
         body["cover"] = parsed["cover"]
     # A page's own description reads well under the note; YouTube's parsed excerpt is unrelated text.
     if parsed.get("excerpt") and parsed.get("type") != "video":
-        body["excerpt"] = parsed["excerpt"][:500]
+        body["excerpt"] = sentences(parsed["excerpt"])
     return body
 
 
@@ -168,6 +177,9 @@ def publish(conn: sqlite3.Connection, run_id: int, picks: list[Decision], cfg: P
             stats["already_saved"] += 1
         else:
             new.append(d)
+    # Raindrop shows the last-saved raindrop first, and ignores `order` on create: save the
+    # lowest-ranked pick first so the best one ends up on top.
+    new.sort(key=lambda d: -d.rank)
     bodies = [raindrop_for(d, collection, client.parse(link_for(d.candidate))) for d in new]
     created = {r["link"]: int(r["_id"]) for r in client.create(bodies)} if bodies else {}
     for d in new:
