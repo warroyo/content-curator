@@ -15,6 +15,7 @@
 | `CURATOR_API_HOST` | `127.0.0.1` | API bind address |
 | `CURATOR_API_PORT` | `8090` | API port |
 | `CURATOR_API_TOKEN` | empty | bearer token for POST endpoints; empty means none |
+| `CURATOR_RAINDROP_TOKEN` | empty | Raindrop.io test token; publishing fails without it |
 | `CURATOR_USER_AGENT` | `content-curator/0.1 (+repo URL)` | HTTP user agent, also used for `robots.txt` |
 
 Compose-only: `CURATOR_DATA_PATH` and `CURATOR_CONFIG_PATH` (host paths to mount), `CURATOR_UID`/`CURATOR_GID` (user to run as), `CURATOR_TAG` (image tag).
@@ -28,9 +29,12 @@ schedule:
   jobs:
     - {job: run, cron: "30 1 * * *"}       # collect, score, curate
     # - {job: collect, cron: "0 13 * * *"}
+publish:
+  enabled: false                 # off: every run is a dry run that only writes the report
+  collection: AI picks           # Raindrop collection, created on the first publish
 ```
 
-Jobs: `collect`, `score`, `curate`, `run`. Restart the service after changing the schedule.
+Jobs: `collect`, `score`, `curate`, `run`. Restart the service after changing the schedule. `curator curate --publish` or `--dry-run` (and the same on `run`) overrides `publish.enabled` for one run; the scheduler and the API follow it.
 
 ## sources.yaml
 

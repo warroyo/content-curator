@@ -24,6 +24,8 @@ class Settings(BaseModel):
     api_port: int = 8090
     # Bearer token required for POST endpoints. Empty means no auth (loopback only).
     api_token: str = ""
+    # Raindrop.io test token, for publishing. Empty means publishing cannot run.
+    raindrop_token: str = ""
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -41,6 +43,7 @@ class Settings(BaseModel):
             api_host=os.environ.get("CURATOR_API_HOST", "127.0.0.1"),
             api_port=int(os.environ.get("CURATOR_API_PORT", "8090")),
             api_token=os.environ.get("CURATOR_API_TOKEN", ""),
+            raindrop_token=os.environ.get("CURATOR_RAINDROP_TOKEN", "").strip(),
         )
 
     @property
@@ -189,8 +192,16 @@ class Schedule(BaseModel):
     misfire_grace_seconds: int = 3600
 
 
+class Publish(BaseModel):
+    # Publish the picks to Raindrop.io. Off means every run is a dry run unless asked otherwise.
+    enabled: bool = False
+    # Raindrop collection the picks go into, created on the first publish.
+    collection: str = "AI picks"
+
+
 class AppConfig(BaseModel):
     schedule: Schedule = Field(default_factory=Schedule)
+    publish: Publish = Field(default_factory=Publish)
 
 
 def load_app_config(config_dir: Path) -> AppConfig:

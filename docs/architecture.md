@@ -13,6 +13,7 @@
 | `stories.py` | Embeds fresh items through `/v1/embeddings` (`local-embed`) and groups same-story coverage; borderline pairs go to the chat model. |
 | `scoring.py` | Builds the prompt from the interest profile, calls the model with a JSON schema response format, validates with Pydantic, caches by input hash. |
 | `select.py` | Deterministic selection: overall score, discovery slots, per-source cap, reading-time budget, near misses. |
+| `publish.py` | Raindrop.io client and publishing: one collection, the explanation as the note, tags, a mapping per item so a pick is never saved twice. |
 | `report.py` | Markdown report of picks and near misses. |
 | `service.py` | `curator serve`: FastAPI app, APScheduler cron jobs from `config/app.yaml`, `/metrics`, `/healthz`. |
 | `jobs.py` | The jobs (`collect`, `score`, `curate`, `run`) and the runner that executes one at a time, records state and metrics. |
@@ -62,14 +63,21 @@ SQLite in WAL mode at `/data/curator.db`, migrated through `PRAGMA user_version`
 | `scores` | one row per item: six dimensions, topics, explanation, confidence, model, prompt version, input hash, tokens, latency |
 | `runs` | each job run with its stats |
 | `selections` | every pick and near miss per curate run, with bucket, score and reason |
+| `published` | one row per item saved to Raindrop: raindrop id, collection, link, `published` or `already_saved` |
 
 ## Same-story grouping
 
 The nightly run embeds each fresh item (title plus the first 300 words) and stores the unit vector in `embeddings`. Pairs from different sources with cosine similarity of `same_story` or more are grouped; pairs between `borderline` and `same_story`, and same-source pairs, are sent to the chat model, which answers "same specific event, or only the same topic". Its answers are cached in `story_judgements`. Groups are complete-linkage: every pair in a story must clear `borderline`, so A~B and B~C cannot pull in an unrelated C. A story keeps its id across nights.
 
-Selection takes one candidate per story, the best-scored item, and the report lists the rest as "Also covered by". Once publishing exists, a story with a published pick is never picked again.
+Selection takes one candidate per story, the best-scored item, and the report lists the rest as "Also covered by". A story with a published pick is never picked again.
 
 If the embedding model is down, grouping is skipped for that run and the rest of the run goes on.
+
+## Publishing
+
+With `publish.enabled` (or `--publish`), `curate` saves the picks to one Raindrop.io collection, "AI picks" by default, created on the first publish. Each raindrop gets the curator's title, the explanation as its `note` (shown on the card under the title), and tags: `ai-curated`, `media-<media>`, the item's `topic-*` tags, plus `ai-discovery`, `ai-listen` or `ai-trial-show` by bucket. A podcast is saved as its Apple Podcasts episode link. Raindrop's `import/url/parse` supplies the type and cover; `pleaseParse` does nothing through the API.
+
+Raindrop accepts the same URL twice, so double-publishing is guarded twice: the `published` table, and `import/url/exists`, which maps a URL already in the account to that raindrop instead of saving it again. If Raindrop fails, the report is still written and the job fails; the picks stay unpublished and can be picked again.
 
 ## Podcasts
 

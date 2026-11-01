@@ -144,6 +144,20 @@ MIGRATIONS: list[str] = [
         judged_at TEXT NOT NULL
     );
     """,
+    # 5: picks published to Raindrop. One row per item; status says whether the curator created the
+    # raindrop or found the URL already saved.
+    """
+    CREATE TABLE published (
+        item_id INTEGER PRIMARY KEY REFERENCES items(id),
+        raindrop_id INTEGER NOT NULL,
+        collection_id INTEGER NOT NULL,
+        link TEXT NOT NULL,
+        status TEXT NOT NULL,
+        run_id INTEGER REFERENCES runs(id),
+        published_at TEXT NOT NULL
+    );
+    CREATE INDEX published_raindrop ON published(raindrop_id);
+    """,
 ]
 
 

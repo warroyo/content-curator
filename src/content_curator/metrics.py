@@ -22,6 +22,8 @@ ITEMS_EMBEDDED = Counter("curator_items_embedded_total", "Items embedded")
 STORIES = Gauge("curator_stories", "Same-story groups among fresh items at the last grouping")
 TRIAL_SHOWS_ADDED = Counter("curator_trial_shows_added_total", "Podcast shows added as trial sources")
 PICKS = Counter("curator_picks_total", "Items picked", ["bucket"])
+PUBLISHED = Counter("curator_published_total", "Picks sent to Raindrop", ["status"])
+PUBLISH_FAILURES = Counter("curator_publish_failures_total", "Curate runs whose publish to Raindrop failed")
 
 
 def record(job: str, stats: dict) -> None:
@@ -44,3 +46,6 @@ def record(job: str, stats: dict) -> None:
     elif job == "curate":
         for bucket, n in stats.get("buckets", {}).items():
             PICKS.labels(bucket).inc(n)
+        for status in ("published", "already_saved"):
+            if stats.get(status):
+                PUBLISHED.labels(status).inc(stats[status])

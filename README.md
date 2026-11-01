@@ -2,7 +2,7 @@
 
 ## Overview
 
-A self-hosted curator that reads a few hundred feed items a day and picks the 5–10 worth your time. It collects RSS and Atom feeds and podcasts, finds new podcast shows on its own, drops duplicates, has a local model score each item against an interest profile, and selects a small, diverse set with a reason for each pick. Phase 1a writes the picks to a markdown report; Phase 1b will publish them to a Raindrop.io collection.
+A self-hosted curator that reads a few hundred feed items a day and picks the 5–10 worth your time. It collects RSS and Atom feeds and podcasts, finds new podcast shows on its own, drops duplicates, has a local model score each item against an interest profile, and selects a small, diverse set with a reason for each pick. It writes the picks to a markdown report and, with publishing on, saves them to a Raindrop.io collection with the reason as the bookmark's note.
 
 It runs as one container: a small service with an HTTP API, a built-in scheduler and Prometheus metrics. It sleeps between runs, using almost no CPU, and does its work overnight. The model is any OpenAI-compatible endpoint; in the home lab that is LiteLLM's `local-qwen` alias on `ubuntu-home`.
 
@@ -28,7 +28,7 @@ flowchart LR
 - Podcast episodes are scored on show notes and published transcripts and linked to Apple Podcasts. A weekly `discover` job finds new shows and tries them.
 - `stories` embeds each fresh item with `local-embed` and groups articles about the same event, so one story yields one pick.
 - `score` sends each fresh item to the model and validates six 0–10 scores, topics and a one-line explanation. Scores are cached.
-- `curate` computes the weighted overall score in code, fills discovery slots, caps items per source and writes the report.
+- `curate` computes the weighted overall score in code, fills discovery slots, caps items per source, publishes the picks to Raindrop (when `publish.enabled`) and writes the report.
 
 ## Quick start
 
@@ -36,7 +36,7 @@ Prerequisites: Docker 24+ with the compose plugin, and an OpenAI-compatible endp
 
 1. Configure the endpoint:
    ```sh
-   cp .env.example .env   # set CURATOR_LLM_API_KEY
+   cp .env.example .env   # set CURATOR_LLM_API_KEY, and CURATOR_RAINDROP_TOKEN to publish
    ```
 2. Edit `config/sources.yaml`, `config/interests.yaml` and the schedule in `config/app.yaml`.
 3. Start the service and run the pipeline once:
@@ -55,8 +55,8 @@ API and CLI reference: [docs/architecture.md](docs/architecture.md#api).
 
 ## Repo structure
 
-- `src/content_curator/` - the application: `service.py` (API, scheduler), `jobs.py`, `stories.py`, `collectors/`, `ingest.py`, `scoring.py`, `select.py`, `report.py`, `cli.py`
-- `config/` - `app.yaml` (schedule), `sources.yaml` (source registry), `interests.yaml` (profile, weights, selection budget)
+- `src/content_curator/` - the application: `service.py` (API, scheduler), `jobs.py`, `stories.py`, `collectors/`, `ingest.py`, `scoring.py`, `select.py`, `publish.py`, `report.py`, `cli.py`
+- `config/` - `app.yaml` (schedule, publishing), `sources.yaml` (source registry), `interests.yaml` (profile, weights, selection budget)
 - `tests/` - unit and mocked integration tests, run in the `test` image target
 - `Dockerfile`, `compose.yaml`, `Makefile` - build, test and run everything in Docker
 - `docs/architecture.md` - components, API, data model, resource use, failure handling

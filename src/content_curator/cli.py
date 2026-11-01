@@ -32,9 +32,6 @@ def _job(settings: Settings, name: str, **kwargs) -> int:
     except ModelUnavailable:
         log.error("model unavailable; items stay queued for the next run")
         return EX_UNAVAILABLE
-    except NotImplementedError as e:
-        log.error(str(e))
-        return EX_USAGE
     return 0
 
 
@@ -54,10 +51,14 @@ def main(argv: list[str] | None = None) -> int:
     s = sub.add_parser("score", help="score new items with the model")
     s.add_argument("--limit", type=int, help="score at most this many items")
 
-    for name, help_ in (("curate", "select picks and write the report"), ("run", "collect, score and curate")):
+    for name, help_ in (("curate", "select picks, publish them and write the report"),
+                        ("run", "collect, score and curate")):
         s = sub.add_parser(name, help=help_)
-        s.add_argument("--dry-run", action="store_true", default=True,
-                       help="write the report without publishing (the only mode until Phase 1b)")
+        mode = s.add_mutually_exclusive_group()
+        mode.add_argument("--dry-run", dest="dry_run", action="store_const", const=True,
+                          help="write the report without publishing")
+        mode.add_argument("--publish", dest="dry_run", action="store_const", const=False,
+                          help="publish to Raindrop even if publish.enabled is off in app.yaml")
         if name == "run":
             s.add_argument("--force", action="store_true")
 

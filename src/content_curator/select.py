@@ -191,8 +191,7 @@ def load_candidates(conn: sqlite3.Connection, interests: Interests) -> list[Cand
           AND datetime(COALESCE(i.published_at, i.fetched_at)) >= datetime('now', '-{int(interests.selection.max_age_days)} days')
           -- never pick an item, or another article about its story, that was already published
           AND COALESCE(i.story_id, i.id) NOT IN (
-              SELECT COALESCE(p.story_id, p.id) FROM selections sel JOIN items p ON p.id = sel.item_id
-              WHERE sel.selected = 1 AND sel.dry_run = 0)
+              SELECT COALESCE(p.story_id, p.id) FROM published pub JOIN items p ON p.id = pub.item_id)
         """
     ).fetchall()
     return [

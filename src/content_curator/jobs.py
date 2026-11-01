@@ -22,7 +22,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
 from content_curator import db, metrics
-from content_curator.config import Settings, load_interests, load_sources
+from content_curator.config import Settings, load_app_config, load_interests, load_sources
 
 log = logging.getLogger(__name__)
 
@@ -95,12 +95,18 @@ def score(settings: Settings, limit: int | None = None) -> dict:
         conn.close()
 
 
-def curate(settings: Settings, dry_run: bool = True, extra_stats: dict | None = None) -> dict:
-    from content_curator import report
+def curate(settings: Settings, dry_run: bool | None = None, extra_stats: dict | None = None) -> dict:
+    """Select the picks, publish them unless this is a dry run, write the report.
+
+    dry_run=None follows `publish.enabled` in app.yaml. A failed publish still writes the report,
+    then fails the job; the picks stay unpublished and can be picked again next run.
+    """
+    from content_curator import publish, report
     from content_curator import select as selection
 
-    if not dry_run:
-        raise NotImplementedError("publishing to Raindrop.io is Phase 1b")
+    publish_cfg = load_app_config(settings.config_dir).publish
+    if dry_run is None:
+        dry_run = not publish_cfg.enabled
     conn = db.connect(settings.db_path)
     try:
         interests = load_interests(settings.config_dir)
@@ -112,19 +118,31 @@ def curate(settings: Settings, dry_run: bool = True, extra_stats: dict | None = 
         for d in result.picks:
             buckets[d.bucket] = buckets.get(d.bucket, 0) + 1
         run.stats.update(candidates=len(candidates), picks=len(result.picks), buckets=buckets, **(extra_stats or {}))
+        publish_error = None
+        if not dry_run:
+            try:
+                run.stats.update(publish.publish(conn, run.id, result.picks, publish_cfg,
+                                                 publish.client_from(settings)))
+            except publish.PublishError as e:
+                publish_error = str(e)
+                run.stats["publish_error"] = publish_error
+                metrics.PUBLISH_FAILURES.inc()
         from content_curator.discover import trial_sources
 
         path = report.write(
             settings.reports_dir, report.render(result, run.stats, dry_run=dry_run, trials=trial_sources(conn))
         )
         run.stats["report"] = path.name
+        if publish_error:
+            run.finish("failed", publish_error)
+            raise publish.PublishError(publish_error)
         run.finish()
         return run.stats
     finally:
         conn.close()
 
 
-def pipeline(settings: Settings, dry_run: bool = True, force: bool = False) -> dict:
+def pipeline(settings: Settings, dry_run: bool | None = None, force: bool = False) -> dict:
     """The nightly job: collect, group stories, score, curate. A chat model outage stops it before curation."""
     collected = collect(settings, force=force)
     grouped = stories(settings)
@@ -236,6 +254,8 @@ class JobRunner:
             cmd.append("--force")
         if kwargs.get("limit"):
             cmd += ["--limit", str(kwargs["limit"])]
+        if kwargs.get("dry_run") is not None:
+            cmd.append("--dry-run" if kwargs["dry_run"] else "--publish")
         # stderr (the child's JSON logs) goes straight to the container log; stdout is the stats.
         env = os.environ | {
             "CURATOR_DATA_DIR": str(self.settings.data_dir),

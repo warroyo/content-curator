@@ -10,3 +10,10 @@ schedule:
     - {job: discover, cron: "0 1 * * 0"}
     # Optional daytime collection, for feeds that publish more than 50 items a day.
     # - {job: collect, cron: "0 13 * * *"}
+
+# Publishing the picks to Raindrop.io (needs CURATOR_RAINDROP_TOKEN in .env).
+# Off: every scheduled run is a dry run that only writes the report.
+# `curator curate --publish` or `--dry-run` overrides this for one run.
+publish:
+  enabled: false
+  collection: AI picks
