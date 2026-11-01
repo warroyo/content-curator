@@ -49,3 +49,13 @@ Turning off Qwen's thinking would cut scoring time about 3x, but the run is over
 ## 2026-10-31: a reserved daily listen
 
 On the first run with podcasts, no episode was picked: most feeds give only show notes, so episodes are scored low-confidence and lose to the day's best articles. Podcasts are listened to at other times (commute, chores), so they should not compete for reading slots. One slot a day, on top of `daily_count` and outside the reading budget, goes to the best episode at 6.0 or more; with none, it stays empty. Episodes can still win reading slots on score, up to `max_per_media.podcast`.
+
+## 2026-11-01: Raindrop.io instead of Readwise Reader
+
+**Context.** Phase 1b publishes the picks somewhere Will reads them. The plan named Readwise Reader, which is paid.
+
+**Decision.** Publish to one "AI picks" collection in Raindrop.io, on the free plan, through its REST API with a test token. The explanation goes in the raindrop's `note`, with `ai-curated`, `topic-*` and `media-*` tags. `POST /import/url/exists` backs up the internal mapping against double-publishing.
+
+**Alternatives rejected.** Readwise Reader: paid. Its reading view and reading progress would have given a better quality measure.
+
+**Consequences.** Raindrop has no read state, so feedback is what Will does to a pick: favourite, highlight, tag `more-like-this` or `meh`, move it elsewhere (kept), or delete it (soft negative). An untouched pick is unknown. Raindrop reads no RSS, so `sources.yaml` stays the only feed list.

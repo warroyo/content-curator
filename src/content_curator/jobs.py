@@ -100,7 +100,7 @@ def curate(settings: Settings, dry_run: bool = True, extra_stats: dict | None = 
     from content_curator import select as selection
 
     if not dry_run:
-        raise NotImplementedError("publishing to Readwise Reader is Phase 1b")
+        raise NotImplementedError("publishing to Raindrop.io is Phase 1b")
     conn = db.connect(settings.db_path)
     try:
         interests = load_interests(settings.config_dir)

@@ -50,7 +50,7 @@ def render(result: Result, stats: dict, dry_run: bool, trials: list[dict] | None
     lines = [
         f"# Curator picks, {when}",
         "",
-        f"{'Dry run: nothing was published.' if dry_run else 'Published to Reader.'} "
+        f"{'Dry run: nothing was published.' if dry_run else 'Published to Raindrop.'} "
         f"{len(result.picks)} picks from {stats.get('candidates', 0)} candidates.",
         "",
         "## Picks",

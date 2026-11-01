@@ -1,4 +1,4 @@
-"""OPML import into config/sources.yaml (from Inoreader or Reader's feed export)."""
+"""OPML import into config/sources.yaml (from Inoreader or any feed reader's export)."""
 
 from __future__ import annotations
 
