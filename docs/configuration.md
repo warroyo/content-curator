@@ -32,6 +32,8 @@ schedule:
 publish:
   enabled: false                 # off: every run is a dry run that only writes the report
   collection: AI picks           # Raindrop collection, created on the first publish
+  inbox_collection: To curate    # links you save here are scored and moved into the picks; empty = off
+  icon: sparkle                  # icon for the collections the curator creates
 ```
 
 Jobs: `collect`, `score`, `curate`, `run`. Restart the service after changing the schedule. `curator curate --publish` or `--dry-run` (and the same on `run`) overrides `publish.enabled` for one run; the scheduler and the API follow it.

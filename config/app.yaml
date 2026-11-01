@@ -17,3 +17,7 @@ schedule:
 publish:
   enabled: false
   collection: AI picks
+  # Save links here from the share sheet or extension; each is scored overnight and moved into
+  # `collection` with the curator's take. Empty turns it off.
+  inbox_collection: To curate
+  icon: sparkle

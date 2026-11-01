@@ -2,7 +2,7 @@
 
 ## Overview
 
-A self-hosted curator that reads a few hundred feed items a day and picks the 5–10 worth your time. It collects RSS and Atom feeds and podcasts, finds new podcast shows on its own, drops duplicates, has a local model score each item against an interest profile, and selects a small, diverse set with a reason for each pick. It writes the picks to a markdown report and, with publishing on, saves them to a Raindrop.io collection with the reason as the bookmark's note.
+A self-hosted curator that reads a few hundred feed items a day and picks the 5–10 worth your time. It collects RSS and Atom feeds and podcasts, finds new podcast shows on its own, drops duplicates, has a local model score each item against an interest profile, and selects a small, diverse set with a reason for each pick. It writes the picks to a markdown report and, with publishing on, saves them to a Raindrop.io collection with the reason as the bookmark's note. Links you save to a Raindrop inbox collection get the same treatment.
 
 It runs as one container: a small service with an HTTP API, a built-in scheduler and Prometheus metrics. It sleeps between runs, using almost no CPU, and does its work overnight. The model is any OpenAI-compatible endpoint; in the home lab that is LiteLLM's `local-qwen` alias on `ubuntu-home`.
 

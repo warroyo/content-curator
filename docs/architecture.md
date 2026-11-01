@@ -63,7 +63,8 @@ SQLite in WAL mode at `/data/curator.db`, migrated through `PRAGMA user_version`
 | `scores` | one row per item: six dimensions, topics, explanation, confidence, model, prompt version, input hash, tokens, latency |
 | `runs` | each job run with its stats |
 | `selections` | every pick and near miss per curate run, with bucket, score and reason |
-| `published` | one row per item saved to Raindrop: raindrop id, collection, link, `published` or `already_saved` |
+| `published` | one row per item saved to Raindrop: raindrop id, collection, link, `published`, `already_saved` or `submitted` |
+| `inbox` | links pulled from the Raindrop inbox collection, with your note and tags, until moved into the picks |
 
 ## Same-story grouping
 
@@ -78,6 +79,12 @@ If the embedding model is down, grouping is skipped for that run and the rest of
 With `publish.enabled` (or `--publish`), `curate` saves the picks to one Raindrop.io collection, "AI picks" by default, created on the first publish. Each raindrop gets the curator's title, the explanation as its `note` (shown on the card under the title), and tags: `ai-curated`, `media-<media>`, the item's `topic-*` tags, plus `ai-discovery`, `ai-listen` or `ai-trial-show` by bucket. A podcast is saved as its Apple Podcasts episode link. Raindrop's `import/url/parse` supplies the type and cover; `pleaseParse` does nothing through the API.
 
 Raindrop accepts the same URL twice, so double-publishing is guarded twice: the `published` table, and `import/url/exists`, which maps a URL already in the account to that raindrop instead of saving it again. If Raindrop fails, the report is still written and the job fails; the picks stay unpublished and can be picked again.
+
+The curator creates its collections on first use, in list view, with a description and an icon from Raindrop's icon library.
+
+### Inbox
+
+Links you save to the inbox collection ("To curate"), from the phone's share sheet or the browser extension, are pulled in by `collect` as items of the `manual` source, with full text extracted like any page. The nightly run scores them, and `curate` adds every scored inbox link to the picks as `submitted`, on top of the daily count and whatever the score: the point is the curator's take on something you chose. Publishing then moves that same raindrop into the picks collection, sets the title, prepends the explanation to the note (keeping yours as "Your note: …") and adds the curator's tags to yours. Moving rather than copying keeps your highlights. In a dry run the report lists them under "You submitted" and they stay in the inbox.
 
 ## Podcasts
 

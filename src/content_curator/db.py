@@ -158,6 +158,19 @@ MIGRATIONS: list[str] = [
     );
     CREATE INDEX published_raindrop ON published(raindrop_id);
     """,
+    # 6: links saved to the Raindrop inbox collection, until they are scored and moved into the picks
+    """
+    CREATE TABLE inbox (
+        raindrop_id INTEGER PRIMARY KEY,
+        item_id INTEGER NOT NULL REFERENCES items(id),
+        link TEXT NOT NULL,
+        note TEXT NOT NULL DEFAULT '',
+        tags TEXT NOT NULL DEFAULT '[]',
+        saved_at TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'pending'
+    );
+    CREATE INDEX inbox_item ON inbox(item_id);
+    """,
 ]
 
 

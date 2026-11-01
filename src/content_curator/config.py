@@ -197,6 +197,11 @@ class Publish(BaseModel):
     enabled: bool = False
     # Raindrop collection the picks go into, created on the first publish.
     collection: str = "AI picks"
+    # Raindrop collection you save links into for the curator to score. Each saved link is scored
+    # overnight and moved into `collection` with the explanation. Empty turns the inbox off.
+    inbox_collection: str = "To curate"
+    # Icon for the collections the curator creates, searched in Raindrop's icon library.
+    icon: str = "sparkle"
 
 
 class AppConfig(BaseModel):

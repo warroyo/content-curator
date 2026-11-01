@@ -68,15 +68,21 @@ def is_discovery(c: Candidate) -> bool:
     return c.outside_interests and c.discovery_value >= 7 and c.depth >= 5 and c.source_quality >= 5
 
 
+def prepare(c: Candidate, sel: Selection, weights: Weights) -> Candidate:
+    """Fill in the overall score and the reading or listening minutes."""
+    c.overall = overall(c, weights)  # type: ignore[arg-type]
+    if c.confidence == "low":
+        c.overall = round(c.overall - LOW_CONFIDENCE_PENALTY, 2)
+    if c.media == "podcast":
+        c.minutes = round(c.duration_s / 60) if c.duration_s else 0
+    else:
+        c.minutes = max(1, round(c.word_count / sel.words_per_minute)) if c.word_count else 0
+    return c
+
+
 def select(candidates: list[Candidate], sel: Selection, weights: Weights) -> Result:
     for c in candidates:
-        c.overall = overall(c, weights)  # type: ignore[arg-type]
-        if c.confidence == "low":
-            c.overall = round(c.overall - LOW_CONFIDENCE_PENALTY, 2)
-        if c.media == "podcast":
-            c.minutes = round(c.duration_s / 60) if c.duration_s else 0
-        else:
-            c.minutes = max(1, round(c.word_count / sel.words_per_minute)) if c.word_count else 0
+        prepare(c, sel, weights)
     candidates = collapse_stories(candidates)
 
     per_source: Counter[str] = Counter()
@@ -178,34 +184,49 @@ def collapse_stories(candidates: list[Candidate]) -> list[Candidate]:
     return out
 
 
-def load_candidates(conn: sqlite3.Connection, interests: Interests) -> list[Candidate]:
-    """Scored, non-duplicate items in the freshness window that were never picked before."""
-    rows = conn.execute(
-        f"""
+CANDIDATE_SELECT = """
         SELECT i.id, i.source_id, s.name AS source_name, i.title, i.url, i.published_at, i.word_count,
                i.story_id, i.media, i.duration_s, i.listen_url, s.discovery AS source_discovery, sc.*
         FROM items i
         JOIN scores sc ON sc.item_id = i.id
         JOIN sources s ON s.id = i.source_id
+"""
+
+
+def load_candidates(conn: sqlite3.Connection, interests: Interests) -> list[Candidate]:
+    """Scored, non-duplicate items in the freshness window that were never picked before."""
+    rows = conn.execute(
+        CANDIDATE_SELECT + f"""
         WHERE i.duplicate_of IS NULL
+          -- links saved to the Raindrop inbox are always shown, as submitted picks
+          AND i.id NOT IN (SELECT item_id FROM inbox WHERE status = 'pending')
           AND datetime(COALESCE(i.published_at, i.fetched_at)) >= datetime('now', '-{int(interests.selection.max_age_days)} days')
           -- never pick an item, or another article about its story, that was already published
           AND COALESCE(i.story_id, i.id) NOT IN (
               SELECT COALESCE(p.story_id, p.id) FROM published pub JOIN items p ON p.id = pub.item_id)
         """
     ).fetchall()
-    return [
-        Candidate(
-            item_id=r["id"], source_id=r["source_id"], source_name=r["source_name"], title=r["title"], url=r["url"],
-            published_at=r["published_at"], word_count=r["word_count"], confidence=r["confidence"],
-            explanation=r["explanation"], topics=json.loads(r["topics"]), relevance=r["relevance"],
-            novelty=r["novelty"], depth=r["depth"], source_quality=r["source_quality"],
-            actionability=r["actionability"], discovery_value=r["discovery_value"],
-            outside_interests=bool(r["outside_interests"]), story_id=r["story_id"], media=r["media"],
-            duration_s=r["duration_s"], listen_url=r["listen_url"], trial=r["source_discovery"] == "trial",
-        )
-        for r in rows
-    ]
+    return [_candidate(r) for r in rows]
+
+
+def load_submitted(conn: sqlite3.Connection) -> list[Decision]:
+    """Scored links from the Raindrop inbox, not yet moved into the picks. No age limit or threshold."""
+    rows = conn.execute(
+        CANDIDATE_SELECT + "WHERE i.id IN (SELECT item_id FROM inbox WHERE status = 'pending') ORDER BY i.id"
+    ).fetchall()
+    return [Decision(_candidate(r), True, "submitted", "you saved it to the inbox") for r in rows]
+
+
+def _candidate(r: sqlite3.Row) -> Candidate:
+    return Candidate(
+        item_id=r["id"], source_id=r["source_id"], source_name=r["source_name"], title=r["title"], url=r["url"],
+        published_at=r["published_at"], word_count=r["word_count"], confidence=r["confidence"],
+        explanation=r["explanation"], topics=json.loads(r["topics"]), relevance=r["relevance"],
+        novelty=r["novelty"], depth=r["depth"], source_quality=r["source_quality"],
+        actionability=r["actionability"], discovery_value=r["discovery_value"],
+        outside_interests=bool(r["outside_interests"]), story_id=r["story_id"], media=r["media"],
+        duration_s=r["duration_s"], listen_url=r["listen_url"], trial=r["source_discovery"] == "trial",
+    )
 
 
 def record(conn: sqlite3.Connection, run_id: int, result: Result, dry_run: bool) -> None:

@@ -5,10 +5,15 @@ against double-publishing, and `import/url/exists` is a second one: a URL alread
 (saved by hand, or by a run that died before recording it) is mapped to that raindrop, not saved
 again. `pleaseParse` does nothing through the API (smoke test, 2026-11-01), so each pick is parsed
 with `import/url/parse` for its type and cover; the title and note come from the curator.
+
+The inbox collection ("To curate") works the other way: links saved there are pulled in by
+`collect`, scored overnight like any item, and the same raindrop is moved into the picks collection
+with the explanation added to its note. Moving, not copying, keeps your own note and highlights.
 """
 
 from __future__ import annotations
 
+import json
 import logging
 import sqlite3
 import time
@@ -17,6 +22,7 @@ import httpx
 
 from content_curator.config import Publish, Settings
 from content_curator.db import now
+from content_curator.normalize import normalize_url
 from content_curator.select import Candidate, Decision
 
 log = logging.getLogger(__name__)
@@ -25,6 +31,12 @@ API = "https://api.raindrop.io/rest/v1"
 # Batch create takes at most this many raindrops per request.
 BATCH = 100
 RETRIES = 3
+PAGE = 50
+
+DESCRIPTIONS = {
+    "picks": "Nightly picks from content-curator. The note on each says why it was picked.",
+    "inbox": "Save links here. content-curator scores them overnight and moves them to the picks with its take.",
+}
 
 
 class PublishError(Exception):
@@ -59,12 +71,42 @@ class Raindrop:
             return resp.json()
         raise PublishError(f"Raindrop {method} {path}: retries exhausted")
 
-    def collection_id(self, title: str) -> int:
-        """Id of the root collection with this title, created if missing."""
+    def collection_id(self, title: str, description: str = "", icon: str = "") -> int:
+        """Id of the root collection with this title, created if missing: list view, description, icon."""
         for c in self._call("GET", "/collections").get("items", []):
             if c.get("title") == title:
                 return int(c["_id"])
-        return int(self._call("POST", "/collection", json={"title": title})["item"]["_id"])
+        body: dict = {"title": title, "view": "list", "description": description}
+        cover = self.icon(icon) if icon else None
+        if cover:
+            body["cover"] = [cover]
+        log.info("raindrop collection created", extra={"collection": title})
+        return int(self._call("POST", "/collection", json=body)["item"]["_id"])
+
+    def icon(self, query: str) -> str | None:
+        """First icon in Raindrop's icon library for a word, as a PNG URL."""
+        try:
+            for group in self._call("GET", f"/collections/covers/{query}").get("items", []):
+                for icon in group.get("icons", []):
+                    if icon.get("png"):
+                        return icon["png"]
+        except PublishError:
+            pass
+        return None
+
+    def raindrops(self, collection: int) -> list[dict]:
+        out: list[dict] = []
+        page = 0
+        while True:
+            items = self._call("GET", f"/raindrops/{collection}",
+                               params={"perpage": PAGE, "page": page}).get("items", [])
+            out += items
+            if len(items) < PAGE:
+                return out
+            page += 1
+
+    def update(self, raindrop_id: int, fields: dict) -> dict:
+        return self._call("PUT", f"/raindrop/{raindrop_id}", json=fields).get("item", {})
 
     def existing(self, urls: list[str]) -> dict[str, int]:
         """Raindrop id per URL for those already saved anywhere in the account."""
@@ -100,6 +142,8 @@ def tags_for(d: Decision) -> list[str]:
         tags.append("ai-discovery")
     if d.bucket == "listen":
         tags.append("ai-listen")
+    if d.bucket == "submitted":
+        tags.append("ai-submitted")
     if c.trial:
         tags.append("ai-trial-show")
     return list(dict.fromkeys(tags))
@@ -145,22 +189,53 @@ def raindrop_for(d: Decision, collection: int, parsed: dict) -> dict:
     return body
 
 
+def pull_inbox(conn: sqlite3.Connection, settings: Settings, cfg: Publish, client: Raindrop) -> dict:
+    """Bring links saved to the inbox collection in as items, to be scored and moved into the picks."""
+    from content_curator import ingest
+
+    stats = {"inbox_new": 0}
+    if not cfg.inbox_collection:
+        return stats
+    inbox = client.collection_id(cfg.inbox_collection, DESCRIPTIONS["inbox"], cfg.icon)
+    known = {r[0] for r in conn.execute("SELECT raindrop_id FROM inbox")}
+    for r in client.raindrops(inbox):
+        rid = int(r["_id"])
+        if rid in known:
+            continue
+        link = r["link"]
+        title = r.get("title") if r.get("title") and r.get("title") != link else None
+        # A link saved without a title (from a share sheet that sends only the URL) gets the page's own.
+        title = title or client.parse(link).get("title") or None
+        item_id = ingest.ingest_url(conn, settings, link, title)
+        if item_id is None:
+            row = conn.execute("SELECT id FROM items WHERE normalized_url=?", (normalize_url(link),)).fetchone()
+            item_id = row[0]
+        conn.execute(
+            "INSERT INTO inbox(raindrop_id, item_id, link, note, tags, saved_at) VALUES (?, ?, ?, ?, ?, ?)",
+            (rid, item_id, link, r.get("note") or "", json.dumps(r.get("tags") or []), now()),
+        )
+        stats["inbox_new"] += 1
+    if stats["inbox_new"]:
+        log.info("inbox pulled", extra=stats)
+    return stats
+
+
 def publish(conn: sqlite3.Connection, run_id: int, picks: list[Decision], cfg: Publish,
             client: Raindrop) -> dict:
-    """Save picks not yet published; record every pick's raindrop id. Returns counts."""
-    stats = {"published": 0, "already_published": 0, "already_saved": 0}
+    """Save picks not yet published, move submitted ones from the inbox; record every raindrop id."""
+    stats = {"published": 0, "already_published": 0, "already_saved": 0, "submitted": 0}
     done = {r[0] for r in conn.execute("SELECT item_id FROM published")}
+    # A submitted link is always moved, even if the curator had already picked the same item.
     todo = []
     for d in picks:
-        if d.candidate.item_id in done:
+        if d.candidate.item_id in done and d.bucket != "submitted":
             stats["already_published"] += 1
         else:
             todo.append(d)
     if not todo:
         return stats
 
-    collection = client.collection_id(cfg.collection)
-    saved = client.existing([link_for(d.candidate) for d in todo])
+    collection = client.collection_id(cfg.collection, DESCRIPTIONS["picks"], cfg.icon)
 
     def record(d: Decision, raindrop_id: int, status: str) -> None:
         conn.execute(
@@ -168,6 +243,27 @@ def publish(conn: sqlite3.Connection, run_id: int, picks: list[Decision], cfg: P
             "published_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
             (d.candidate.item_id, raindrop_id, collection, link_for(d.candidate), status, run_id, now()),
         )
+
+    for d in [d for d in todo if d.bucket == "submitted"]:
+        row = conn.execute(
+            "SELECT raindrop_id, note, tags FROM inbox WHERE item_id=? AND status='pending' ORDER BY saved_at LIMIT 1",
+            (d.candidate.item_id,),
+        ).fetchone()
+        if row is None:
+            continue
+        own_note = (row["note"] or "").strip()
+        note = note_for(d.candidate) + (f"\n\nYour note: {own_note}" if own_note else "")
+        tags = list(dict.fromkeys([*json.loads(row["tags"]), *tags_for(d)]))
+        client.update(row["raindrop_id"], {"collection": {"$id": collection}, "note": note, "tags": tags,
+                                           "title": d.candidate.title})
+        conn.execute("UPDATE inbox SET status='published' WHERE item_id=?", (d.candidate.item_id,))
+        record(d, row["raindrop_id"], "submitted")
+        stats["submitted"] += 1
+    todo = [d for d in todo if d.bucket != "submitted"]
+    if not todo:
+        return stats
+
+    saved = client.existing([link_for(d.candidate) for d in todo])
 
     new = []
     for d in todo:

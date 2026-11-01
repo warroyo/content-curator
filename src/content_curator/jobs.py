@@ -51,11 +51,22 @@ def data_lock(settings: Settings) -> Iterator[None]:
 
 
 def collect(settings: Settings, force: bool = False) -> dict:
+    """Fetch due sources, then pull links saved to the Raindrop inbox. An inbox failure is logged, not fatal."""
     from content_curator import ingest
 
     conn = db.connect(settings.db_path)
     try:
-        return ingest.collect(conn, settings, load_sources(settings.config_dir), force=force)
+        stats = ingest.collect(conn, settings, load_sources(settings.config_dir), force=force)
+        publish_cfg = load_app_config(settings.config_dir).publish
+        if settings.raindrop_token and publish_cfg.inbox_collection:
+            from content_curator import publish
+
+            try:
+                stats.update(publish.pull_inbox(conn, settings, publish_cfg, publish.client_from(settings)))
+            except publish.PublishError as e:
+                stats["inbox_error"] = str(e)
+                log.warning("raindrop inbox pull failed", extra={"error": str(e)})
+        return stats
     finally:
         conn.close()
 
@@ -113,6 +124,12 @@ def curate(settings: Settings, dry_run: bool | None = None, extra_stats: dict | 
         run = db.Run(conn, "curate")
         candidates = selection.load_candidates(conn, interests)
         result = selection.select(candidates, interests.selection, interests.scoring.weights)
+        # Links saved to the Raindrop inbox come on top of the day's picks, whatever their score.
+        submitted = selection.load_submitted(conn)
+        for d in submitted:
+            selection.prepare(d.candidate, interests.selection, interests.scoring.weights)
+            d.rank = len(result.picks) + 1
+            result.picks.append(d)
         selection.record(conn, run.id, result, dry_run=dry_run)
         buckets: dict[str, int] = {}
         for d in result.picks:

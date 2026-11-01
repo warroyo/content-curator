@@ -17,6 +17,9 @@ class FakeRaindrop:
 
     def __init__(self, saved: dict[str, int] | None = None):
         self.collections: dict[str, int] = {}
+        self.collection_bodies: dict[str, dict] = {}
+        self.inbox: list[dict] = []
+        self.updates: dict[int, dict] = {}
         self.saved = dict(saved or {})
         self.created: list[dict] = []
         self.next_id = 1000
@@ -30,8 +33,18 @@ class FakeRaindrop:
         if path == "/collections":
             return httpx.Response(200, json={"items": [{"_id": i, "title": t} for t, i in self.collections.items()]})
         if path == "/collection":
-            self.collections[body["title"]] = 77
-            return httpx.Response(200, json={"result": True, "item": {"_id": 77, "title": body["title"]}})
+            cid = 77 + len(self.collections)
+            self.collections[body["title"]] = cid
+            self.collection_bodies[body["title"]] = body
+            return httpx.Response(200, json={"result": True, "item": {"_id": cid, "title": body["title"]}})
+        if path.startswith("/collections/covers/"):
+            return httpx.Response(200, json={"items": [{"title": "Icons", "icons": [{"png": "https://icon.test/x.png"}]}]})
+        if path.startswith("/raindrops/") and request.method == "GET":
+            page = int(request.url.params.get("page", 0))
+            return httpx.Response(200, json={"items": self.inbox if page == 0 else []})
+        if path.startswith("/raindrop/") and request.method == "PUT":
+            self.updates[int(path.rsplit("/", 1)[1])] = body
+            return httpx.Response(200, json={"result": True, "item": body})
         if path == "/import/url/exists":
             dupes = [{"link": u, "_id": self.saved[u]} for u in body["urls"] if u in self.saved]
             return httpx.Response(200, json={"result": bool(dupes), "ids": [d["_id"] for d in dupes],
@@ -85,7 +98,7 @@ def test_publishes_new_picks_into_collection(conn):
              pick(conn, 3, bucket="listen", media="podcast", listen_url="https://podcasts.apple.com/ep?i=3")]
     stats = publish.publish(conn, run_id(conn), picks, Publish(collection="AI picks"), client_for(fake))
 
-    assert stats == {"published": 3, "already_published": 0, "already_saved": 0}
+    assert stats == {"published": 3, "already_published": 0, "already_saved": 0, "submitted": 0}
     assert fake.collections == {"AI picks": 77}
     assert fake.auth == {"Bearer secret"}
     by_link = {r["link"]: r for r in fake.created}
@@ -152,3 +165,44 @@ def test_excerpt_ends_at_a_sentence():
     out = publish.sentences(text)
     assert len(out) <= 300 and out.endswith(".")
     assert publish.sentences("word " * 100).endswith("…")
+
+
+def test_collection_created_with_view_description_and_icon(conn):
+    fake = FakeRaindrop()
+    publish.publish(conn, run_id(conn), [pick(conn, 1)], Publish(), client_for(fake))
+    body = fake.collection_bodies["AI picks"]
+    assert body["view"] == "list" and body["description"] and body["cover"] == ["https://icon.test/x.png"]
+
+
+def test_inbox_link_is_pulled_then_moved_into_picks(conn, settings, monkeypatch):
+    from content_curator import ingest
+
+    def fake_ingest(conn, settings, url, title=None):
+        conn.execute("INSERT OR IGNORE INTO sources(id, name, url, type) VALUES ('manual', 'Manual', '', 'manual')")
+        return conn.execute(
+            "INSERT INTO items(source_id, url, normalized_url, title, fetched_at) VALUES ('manual', ?, ?, ?, ?)",
+            (url, url, title or url, db.now())).lastrowid
+
+    monkeypatch.setattr(ingest, "ingest_url", fake_ingest)
+    fake = FakeRaindrop()
+    fake.inbox = [{"_id": 9001, "link": "https://mine.test/a", "title": "Mine", "note": "read this", "tags": ["k8s"]}]
+    cfg = Publish()
+    assert publish.pull_inbox(conn, settings, cfg, client_for(fake)) == {"inbox_new": 1}
+    # A second pull does not add it again.
+    assert publish.pull_inbox(conn, settings, cfg, client_for(fake)) == {"inbox_new": 0}
+    assert fake.collection_bodies["To curate"]["description"]
+
+    item_id = conn.execute("SELECT item_id FROM inbox WHERE raindrop_id=9001").fetchone()[0]
+    d = Decision(Candidate(
+        item_id=item_id, source_id="manual", source_name="Manual", title="Mine", url="https://mine.test/a",
+        published_at=None, word_count=500, confidence="high", explanation="Curator's take.", topics=["topic-kubernetes"],
+        relevance=5, novelty=5, depth=5, source_quality=5, actionability=5, discovery_value=5,
+        outside_interests=False), True, "submitted", "you saved it to the inbox", rank=1)
+    stats = publish.publish(conn, run_id(conn), [d], cfg, client_for(fake))
+
+    assert stats["submitted"] == 1 and fake.created == []
+    moved = fake.updates[9001]
+    assert moved["collection"] == {"$id": fake.collections["AI picks"]}
+    assert moved["note"].startswith("Curator's take.") and "Your note: read this" in moved["note"]
+    assert moved["tags"][0] == "k8s" and "ai-submitted" in moved["tags"]
+    assert conn.execute("SELECT status FROM inbox WHERE raindrop_id=9001").fetchone()[0] == "published"
