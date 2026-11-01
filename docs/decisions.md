@@ -56,6 +56,6 @@ On the first run with podcasts, no episode was picked: most feeds give only show
 
 **Decision.** Publish to one "AI picks" collection in Raindrop.io, on the free plan, through its REST API with a test token. The explanation goes in the raindrop's `note`, with `ai-curated`, `topic-*` and `media-*` tags. `POST /import/url/exists` backs up the internal mapping against double-publishing.
 
-**Alternatives rejected.** Readwise Reader: paid. Its reading view and reading progress would have given a better quality measure.
+**Alternatives rejected.** Readwise Reader: paid. Its reading progress would have given a better quality measure. Raindrop has a clean article preview with highlights, so reading in the app is not lost.
 
 **Consequences.** Raindrop has no read state, so feedback is what Will does to a pick: favourite, highlight, tag `more-like-this` or `meh`, move it elsewhere (kept), or delete it (soft negative). An untouched pick is unknown. Raindrop reads no RSS, so `sources.yaml` stays the only feed list.
