@@ -15,7 +15,7 @@ schedule:
 # Off: every scheduled run is a dry run that only writes the report.
 # `curator curate --publish` or `--dry-run` overrides this for one run.
 publish:
-  enabled: true
+  enabled: false
   collection: AI picks
   # Save links here from the share sheet or extension; each is scored overnight and moved into
   # `collection` with the curator's take. Empty turns it off.
