@@ -10,8 +10,10 @@ services:
     command: ["serve"]
     user: "${CURATOR_UID:-1000}:${CURATOR_GID:-1000}"
     network_mode: host
+    # The container's settings and secrets. dev-environment points this at a file under
+    # ~/.secrets (CURATOR_ENV_FILE, set in the file passed with --env-file).
     env_file:
-      - path: .env
+      - path: ${CURATOR_ENV_FILE:-.env}
         required: false
     environment:
       CURATOR_DATA_DIR: /data
