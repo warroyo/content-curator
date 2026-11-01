@@ -7,7 +7,7 @@ schedule:
     # Overnight: collect, score with the local model while the EVO-X2 is idle, pick, report.
     - {job: run, cron: "30 1 * * *"}
     # Weekly: search Apple Podcasts for new shows to try (see podcast_discovery in interests.yaml).
-    - {job: discover, cron: "0 1 * * 0"}
+    - {job: discover, cron: "0 1 * * sun"}
     # Optional daytime collection, for feeds that publish more than 50 items a day.
     # - {job: collect, cron: "0 13 * * *"}
 
@@ -15,7 +15,7 @@ schedule:
 # Off: every scheduled run is a dry run that only writes the report.
 # `curator curate --publish` or `--dry-run` overrides this for one run.
 publish:
-  enabled: false
+  enabled: true
   collection: AI picks
   # Save links here from the share sheet or extension; each is scored overnight and moved into
   # `collection` with the curator's take. Empty turns it off.

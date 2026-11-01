@@ -42,6 +42,10 @@ def build_scheduler(settings: Settings, runner: JobRunner) -> BackgroundSchedule
             continue
         if entry.job not in JOBS:
             raise ValueError(f"unknown job in app.yaml schedule: {entry.job!r}")
+        dow = entry.cron.split()[-1]
+        if any(ch.isdigit() for ch in dow):
+            # APScheduler numbers weekdays from Monday (0 = mon), unlike cron (0 = sun).
+            raise ValueError(f"use weekday names (sun, mon, ...) in app.yaml cron, not numbers: {entry.cron!r}")
         scheduler.add_job(
             runner._run_quietly, CronTrigger.from_crontab(entry.cron, timezone=cfg.timezone),
             args=[entry.job], id=f"{entry.job}:{entry.cron}", name=entry.job,

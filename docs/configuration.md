@@ -36,7 +36,7 @@ publish:
   icon: sparkle                  # icon for the collections the curator creates
 ```
 
-Jobs: `collect`, `score`, `curate`, `run`. Restart the service after changing the schedule. `curator curate --publish` or `--dry-run` (and the same on `run`) overrides `publish.enabled` for one run; the scheduler and the API follow it.
+Jobs: `collect`, `score`, `curate`, `run`. Restart the service after changing the schedule. Write weekdays as names (`sun`, `mon-fri`): APScheduler numbers them from Monday, unlike cron, so a numeric weekday is rejected. `curator curate --publish` or `--dry-run` (and the same on `run`) overrides `publish.enabled` for one run; the scheduler and the API follow it.
 
 ## sources.yaml
 

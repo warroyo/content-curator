@@ -15,6 +15,9 @@ REPO = Path(__file__).resolve().parent.parent
 def settings(tmp_path: Path) -> Settings:
     config = tmp_path / "config"
     shutil.copytree(REPO / "config", config)
+    # The repo's app.yaml is the live config and may publish; tests never reach Raindrop.
+    app = config / "app.yaml"
+    app.write_text(app.read_text().replace("enabled: true", "enabled: false"))
     return Settings(
         data_dir=tmp_path / "data",
         config_dir=config,
