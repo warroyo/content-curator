@@ -59,3 +59,11 @@ On the first run with podcasts, no episode was picked: most feeds give only show
 **Alternatives rejected.** Readwise Reader: paid. Its reading progress would have given a better quality measure. Raindrop has a clean article preview with highlights, so reading in the app is not lost.
 
 **Consequences.** Raindrop has no read state, so feedback is what Will does to a pick: favourite, highlight, tag `more-like-this` or `meh`, move it elsewhere (kept), or delete it (soft negative). An untouched pick is unknown. Raindrop reads no RSS, so `sources.yaml` stays the only feed list.
+
+## 2026-11-01: published image, config outside it
+
+**Context.** The curator first ran from a working copy with `make up`. The lab's rule is that dev-environment installs everything on the servers, and it should install, not build.
+
+**Decision.** GitHub Actions tests every push and publishes the runtime image to GHCR on pushes to main. dev-environment pins an image by digest, generates `app.yaml`, the env file, a compose file and a systemd unit. The repo and the image are public, so the server needs no registry login; nothing secret is in either. `sources` and `interests` live as markdown notes in the private Obsidian vault, with the settings in fenced `yaml` blocks, so they can be read and edited in Obsidian; the container mounts the vault's `notes/` read-only.
+
+**Alternatives rejected.** Building the image on the server from a clone (mixes build and deploy). A private image with a read-only registry token (more moving parts for no secret). Config in dev-environment (public, and editing preferences would mean a pull request). YAML files in the vault (Obsidian cannot open them).

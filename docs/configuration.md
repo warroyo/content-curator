@@ -11,7 +11,9 @@
 | `CURATOR_LLM_TIMEOUT` | `300` | seconds per request |
 | `CURATOR_LOG_LEVEL` | `INFO` | log level; logs are JSON on stderr |
 | `CURATOR_DATA_DIR` | `/data` in the image | database, lock and reports |
-| `CURATOR_CONFIG_DIR` | `/config` in the image | `sources.yaml` and `interests.yaml` |
+| `CURATOR_CONFIG_DIR` | `/config` in the image | `app.yaml`, and `sources.yaml` and `interests.yaml` unless set below |
+| `CURATOR_SOURCES_FILE` | `<config dir>/sources.yaml` | the source registry: a YAML file, or a markdown note whose ```` ```yaml ```` blocks hold it |
+| `CURATOR_INTERESTS_FILE` | `<config dir>/interests.yaml` | the interest profile, same two forms |
 | `CURATOR_API_HOST` | `127.0.0.1` | API bind address |
 | `CURATOR_API_PORT` | `8090` | API port |
 | `CURATOR_API_TOKEN` | empty | bearer token for POST endpoints; empty means none |
@@ -37,6 +39,10 @@ publish:
 ```
 
 Jobs: `collect`, `score`, `curate`, `run`. Restart the service after changing the schedule. Write weekdays as names (`sun`, `mon-fri`): APScheduler numbers them from Monday, unlike cron, so a numeric weekday is rejected. `curator curate --publish` or `--dry-run` (and the same on `run`) overrides `publish.enabled` for one run; the scheduler and the API follow it.
+
+Config is read at the start of every job, so an edit applies from the next run without a restart (the schedule in `app.yaml` is the exception).
+
+In the home lab, `sources` and `interests` are notes in the Obsidian vault (`notes/content-curator-sources.md`, `notes/content-curator-interests.md`): prose for the reader, the settings in fenced `yaml` blocks, joined in order. dev-environment generates `app.yaml`. The files in `config/` here are the defaults for local runs.
 
 ## sources.yaml
 

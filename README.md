@@ -1,5 +1,7 @@
 # content-curator
 
+[![image](https://github.com/warroyo/content-curator/actions/workflows/image.yaml/badge.svg)](https://github.com/warroyo/content-curator/actions/workflows/image.yaml)
+
 ## Overview
 
 A self-hosted curator that reads a few hundred feed items a day and picks the 5–10 worth your time. It collects RSS and Atom feeds and podcasts, finds new podcast shows on its own, drops duplicates, has a local model score each item against an interest profile, and selects a small, diverse set with a reason for each pick. It writes the picks to a markdown report and, with publishing on, saves them to a Raindrop.io collection with the reason as the bookmark's note. Links you save to a Raindrop inbox collection get the same treatment.
@@ -56,7 +58,8 @@ API and CLI reference: [docs/architecture.md](docs/architecture.md#api).
 ## Repo structure
 
 - `src/content_curator/` - the application: `service.py` (API, scheduler), `jobs.py`, `stories.py`, `collectors/`, `ingest.py`, `scoring.py`, `select.py`, `publish.py`, `report.py`, `cli.py`
-- `config/` - `app.yaml` (schedule, publishing), `sources.yaml` (source registry), `interests.yaml` (profile, weights, selection budget)
+- `config/` - defaults for local runs: `app.yaml` (schedule, publishing), `sources.yaml` (source registry), `interests.yaml` (profile, weights, selection budget). A deployment can point at its own, including markdown notes ([docs/configuration.md](docs/configuration.md))
+- `.github/workflows/image.yaml` - tests, then publishes `ghcr.io/warroyo/content-curator` on pushes to main
 - `tests/` - unit and mocked integration tests, run in the `test` image target
 - `Dockerfile`, `compose.yaml`, `Makefile` - build, test and run everything in Docker
 - `docs/architecture.md` - components, API, data model, resource use, failure handling

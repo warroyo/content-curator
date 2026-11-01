@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import re
 from pathlib import Path
 
 import yaml
@@ -215,19 +216,36 @@ def load_app_config(config_dir: Path) -> AppConfig:
 
 
 def _load_yaml(path: Path) -> dict:
-    with path.open() as f:
-        return yaml.safe_load(f) or {}
+    """A YAML file, or a markdown note whose ```yaml blocks together hold the YAML.
+
+    The markdown form lets the config live as an Obsidian note: prose around it, the
+    settings in fenced blocks, editable in the app.
+    """
+    text = path.read_text()
+    if path.suffix == ".md":
+        blocks = re.findall(r"^```ya?ml[ \t]*\n(.*?)^```", text, flags=re.MULTILINE | re.DOTALL)
+        if not blocks:
+            raise ValueError(f"{path} has no ```yaml block")
+        text = "\n".join(blocks)
+    return yaml.safe_load(text) or {}
+
+
+def config_file(config_dir: Path, name: str) -> Path:
+    """Where `sources` or `interests` is read from: CURATOR_<NAME>_FILE if set, else <config_dir>/<name>.yaml."""
+    override = os.environ.get(f"CURATOR_{name.upper()}_FILE")
+    return Path(override) if override else config_dir / f"{name}.yaml"
 
 
 def load_sources(config_dir: Path) -> list[Source]:
-    data = _load_yaml(config_dir / "sources.yaml")
+    path = config_file(config_dir, "sources")
+    data = _load_yaml(path)
     sources = [Source(**s) for s in data.get("sources", [])]
     ids = [s.id for s in sources]
     dupes = {i for i in ids if ids.count(i) > 1}
     if dupes:
-        raise ValueError(f"duplicate source ids in sources.yaml: {sorted(dupes)}")
+        raise ValueError(f"duplicate source ids in {path.name}: {sorted(dupes)}")
     return sources
 
 
 def load_interests(config_dir: Path) -> Interests:
-    return Interests(**_load_yaml(config_dir / "interests.yaml"))
+    return Interests(**_load_yaml(config_file(config_dir, "interests")))
