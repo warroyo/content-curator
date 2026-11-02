@@ -25,6 +25,8 @@ class FakeRaindrop:
         self.next_id = 1000
         self.fail_create = False
         self.auth: set[str] = set()
+        self.tagged: list[dict] = []
+        self.searches: list[str] = []
 
     def handler(self, request: httpx.Request) -> httpx.Response:
         self.auth.add(request.headers.get("Authorization", ""))
@@ -39,6 +41,12 @@ class FakeRaindrop:
             return httpx.Response(200, json={"result": True, "item": {"_id": cid, "title": body["title"]}})
         if path.startswith("/collections/covers/"):
             return httpx.Response(200, json={"items": [{"title": "Icons", "icons": [{"png": "https://icon.test/x.png"}]}]})
+        if path == "/raindrops/0" and request.url.params.get("search"):
+            query = request.url.params["search"]
+            self.searches.append(query)
+            tag = query.removeprefix("#")
+            hits = [r for r in self.tagged if any(t.startswith(tag) for t in r["tags"])]
+            return httpx.Response(200, json={"items": hits if int(request.url.params.get("page", 0)) == 0 else []})
         if path.startswith("/raindrops/") and request.method == "GET":
             page = int(request.url.params.get("page", 0))
             return httpx.Response(200, json={"items": self.inbox if page == 0 else []})
@@ -150,8 +158,43 @@ def test_note_carries_trial_and_other_coverage(conn):
     d.candidate.trial = True
     d.candidate.also = [("Other", "Same story", "https://o.test/a")]
     note = publish.note_for(d.candidate)
-    assert "on trial" in note and "Other (https://o.test/a)" in note
-    assert "ai-trial-show" in publish.tags_for(d)
+    assert "a source on trial" in note and "follow" in note and "Other (https://o.test/a)" in note
+    assert "ai-trial-source" in publish.tags_for(d)
+    d.candidate.media = "podcast"
+    assert "ai-trial-show" in publish.tags_for(d) and "a show on trial" in publish.note_for(d.candidate)
+
+
+def test_follow_tags_follow_or_drop_the_source_then_come_off(conn):
+    from content_curator import ingest
+    from content_curator.config import Source
+
+    conn.execute("INSERT INTO sources(id, name, url, type, approved, discovery, discovered_at) "
+                 "VALUES ('t', 'Trial', 'https://t.test/feed', 'rss', 0, 'trial', ?)", (db.now(),))
+    conn.execute("INSERT INTO sources(id, name, url, type) VALUES ('c', 'Configured', 'https://c.test/feed', 'rss')")
+    for item, source, rid in ((1, "t", 501), (2, "c", 502)):
+        url = f"https://{source}.test/{item}"
+        conn.execute("INSERT INTO items(id, source_id, url, normalized_url, title, fetched_at) VALUES (?, ?, ?, ?, 'x', ?)",
+                     (item, source, url, url, db.now()))
+        conn.execute("INSERT INTO published(item_id, raindrop_id, collection_id, link, status, published_at) "
+                     "VALUES (?, ?, 77, 'l', 'published', ?)", (item, rid, db.now()))
+    fake = FakeRaindrop()
+    fake.tagged = [{"_id": 501, "tags": ["ai-curated", "follow"]},
+                   {"_id": 502, "tags": ["unfollow"]},
+                   {"_id": 999, "tags": ["follow"]},          # not a curator pick: left alone
+                   {"_id": 503, "tags": ["followup"]}]        # prefix match from search: ignored
+
+    stats = publish.apply_follow_tags(conn, Publish(), client_for(fake))
+
+    assert stats == {"followed": 1, "unfollowed": 1, "follow_tag_unknown": 1}
+    trial = conn.execute("SELECT discovery, approved, enabled FROM sources WHERE id='t'").fetchone()
+    assert tuple(trial) == ("followed", 1, 1)
+    assert fake.updates == {501: {"tags": ["ai-curated"]}, 502: {"tags": []}}
+    assert fake.searches == ["#follow", "#unfollow"]
+
+    # The followed trial survives a sync without it in sources.yaml; the unfollowed source stays off
+    # even though sources.yaml still lists it.
+    ingest.sync_sources(conn, [Source(id="c", name="Configured", url="https://c.test/feed")])
+    assert dict(conn.execute("SELECT id, enabled FROM sources").fetchall()) == {"t": 1, "c": 0}
 
 
 def test_saved_lowest_rank_first_so_best_is_on_top(conn):

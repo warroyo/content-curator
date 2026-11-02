@@ -51,13 +51,24 @@ def data_lock(settings: Settings) -> Iterator[None]:
 
 
 def collect(settings: Settings, force: bool = False) -> dict:
-    """Fetch due sources, then pull links saved to the Raindrop inbox. An inbox failure is logged, not fatal."""
+    """Apply follow/unfollow tags from Raindrop, fetch due sources, then pull links saved to the Raindrop
+    inbox. A Raindrop failure is logged, not fatal."""
     from content_curator import ingest
 
     conn = db.connect(settings.db_path)
     try:
-        stats = ingest.collect(conn, settings, load_sources(settings.config_dir), force=force)
         publish_cfg = load_app_config(settings.config_dir).publish
+        follow_stats: dict = {}
+        if settings.raindrop_token and (publish_cfg.follow_tag or publish_cfg.unfollow_tag):
+            from content_curator import publish
+
+            try:
+                follow_stats = publish.apply_follow_tags(conn, publish_cfg, publish.client_from(settings))
+            except publish.PublishError as e:
+                follow_stats = {"follow_tags_error": str(e)}
+                log.warning("raindrop follow tags failed", extra={"error": str(e)})
+        stats = ingest.collect(conn, settings, load_sources(settings.config_dir), force=force)
+        stats.update(follow_stats)
         if settings.raindrop_token and publish_cfg.inbox_collection:
             from content_curator import publish
 
@@ -83,12 +94,25 @@ def stories(settings: Settings) -> dict:
 
 
 def discover(settings: Settings) -> dict:
-    """Find new podcast shows on Apple Podcasts and add them as trial sources."""
+    """Weekly: find new podcast shows on Apple Podcasts, then check suggested feeds; both add trial sources."""
     from content_curator.discover import discover_podcasts
 
     conn = db.connect(settings.db_path)
     try:
-        return discover_podcasts(conn, settings, load_interests(settings.config_dir))
+        stats = discover_podcasts(conn, settings, load_interests(settings.config_dir))
+    finally:
+        conn.close()
+    stats["feeds"] = candidates(settings)
+    return stats
+
+
+def candidates(settings: Settings) -> dict:
+    """Check feeds suggested through POST /api/candidates; the best start as trial sources."""
+    from content_curator.discover import discover_feeds
+
+    conn = db.connect(settings.db_path)
+    try:
+        return discover_feeds(conn, settings, load_interests(settings.config_dir))
     finally:
         conn.close()
 
@@ -185,6 +209,7 @@ JOBS: dict[str, Callable[..., dict]] = {
     "curate": curate,
     "run": pipeline,
     "discover": discover,
+    "candidates": candidates,
 }
 
 

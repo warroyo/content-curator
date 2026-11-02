@@ -6,7 +6,8 @@ schedule:
   jobs:
     # Overnight: collect, score with the local model while the EVO-X2 is idle, pick, report.
     - {job: run, cron: "30 1 * * *"}
-    # Weekly: search Apple Podcasts for new shows to try (see podcast_discovery in interests.yaml).
+    # Weekly: search Apple Podcasts for new shows, then check suggested feeds (podcast_discovery
+    # and feed_discovery in interests.yaml).
     - {job: discover, cron: "0 1 * * sun"}
     # Optional daytime collection, for feeds that publish more than 50 items a day.
     # - {job: collect, cron: "0 13 * * *"}
@@ -21,3 +22,6 @@ publish:
   # `collection` with the curator's take. Empty turns it off.
   inbox_collection: To curate
   icon: sparkle
+  # Tag a pick with these in Raindrop to follow or drop its source; read on every collect.
+  follow_tag: follow
+  unfollow_tag: unfollow

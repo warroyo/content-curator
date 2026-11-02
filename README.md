@@ -27,7 +27,7 @@ flowchart LR
 
 - The scheduler starts the nightly `run` job (collect, stories, score, curate) from `config/app.yaml`. The API starts the same jobs on demand and serves status, picks and item explanations.
 - `collect` fetches sources with conditional requests, gets full text from the feed or the page (respecting `robots.txt`), and marks items with the same URL, canonical URL or text as duplicates.
-- Podcast episodes are scored on show notes and published transcripts and linked to Apple Podcasts. A weekly `discover` job finds new shows and tries them.
+- Podcast episodes are scored on show notes and published transcripts and linked to Apple Podcasts. A weekly `discover` job finds new shows and checks feeds suggested through `POST /api/candidates`; the good ones run as trials, and a `follow` or `unfollow` tag on a pick in Raindrop keeps or drops its source.
 - `stories` embeds each fresh item with `local-embed` and groups articles about the same event, so one story yields one pick.
 - `score` sends each fresh item to the model and validates six 0–10 scores, topics and a one-line explanation. Scores are cached.
 - `curate` computes the weighted overall score in code, fills discovery slots, caps items per source, publishes the picks to Raindrop (when `publish.enabled`) and writes the report.

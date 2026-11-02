@@ -167,6 +167,26 @@ class PodcastDiscovery(BaseModel):
     trial_days: int = 30
 
 
+class FeedDiscovery(BaseModel):
+    """Checking suggested feeds (POST /api/candidates) and running the good ones as trial sources."""
+
+    enabled: bool = True
+    # Pending suggestions checked per run, oldest first; the rest wait for the next run.
+    max_checked: int = 30
+    # New trial sources added per run.
+    max_new_per_run: int = 5
+    # Most trial sources running at once, podcasts included; no new trials beyond it.
+    max_active_trials: int = 10
+    # Fit score (0-10) from the chat model needed for a feed to be tried.
+    min_fit: int = 7
+    # The feed's newest entry must be at most this many days old.
+    active_within_days: int = 60
+    # More entries than this in the last 7 days is a firehose, not a source to read.
+    max_per_week: int = 10
+    # A trial feed is disabled after this many days, picked or not; following it keeps it.
+    trial_days: int = 30
+
+
 class Interests(BaseModel):
     groups: list[TopicGroup]
     exclusions: list[str] = Field(default_factory=list)
@@ -176,6 +196,7 @@ class Interests(BaseModel):
     selection: Selection = Field(default_factory=Selection)
     stories: Stories = Field(default_factory=Stories)
     podcast_discovery: PodcastDiscovery = Field(default_factory=PodcastDiscovery)
+    feed_discovery: FeedDiscovery = Field(default_factory=FeedDiscovery)
 
 
 class ScheduledJob(BaseModel):
@@ -202,6 +223,10 @@ class Publish(BaseModel):
     inbox_collection: str = "To curate"
     # Icon for the collections the curator creates, searched in Raindrop's icon library.
     icon: str = "sparkle"
+    # Tags you put on a pick in Raindrop to follow or drop its source. Read on every collect, then
+    # removed from the raindrop. Empty turns one off.
+    follow_tag: str = "follow"
+    unfollow_tag: str = "unfollow"
 
 
 class AppConfig(BaseModel):

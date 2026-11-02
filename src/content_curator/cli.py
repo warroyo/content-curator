@@ -46,7 +46,8 @@ def main(argv: list[str] | None = None) -> int:
     s.add_argument("--force", action="store_true", help="fetch every source, ignoring its interval")
 
     sub.add_parser("stories", help="embed fresh items and group same-story coverage")
-    sub.add_parser("discover", help="find new podcast shows on Apple Podcasts as trial sources")
+    sub.add_parser("discover", help="find new podcast shows and check suggested feeds, as trial sources")
+    sub.add_parser("candidates", help="check suggested feeds (POST /api/candidates) as trial sources")
 
     s = sub.add_parser("score", help="score new items with the model")
     s.add_argument("--limit", type=int, help="score at most this many items")
@@ -85,6 +86,8 @@ def main(argv: list[str] | None = None) -> int:
             return _job(settings, "collect", force=args.force)
         case "discover":
             return _job(settings, "discover")
+        case "candidates":
+            return _job(settings, "candidates")
         case "stories":
             return _job(settings, "stories")
         case "score":

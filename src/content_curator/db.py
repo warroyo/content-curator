@@ -171,6 +171,34 @@ MIGRATIONS: list[str] = [
     );
     CREATE INDEX inbox_item ON inbox(item_id);
     """,
+    # 7: suggested feeds (POST /api/candidates), and follow/unfollow decisions that outlive sources.yaml
+    """
+    CREATE TABLE candidates (
+        url TEXT PRIMARY KEY,
+        submitted_url TEXT NOT NULL,
+        name TEXT NOT NULL DEFAULT '',
+        topics TEXT NOT NULL DEFAULT '[]',
+        why TEXT NOT NULL DEFAULT '',
+        submitted_by TEXT NOT NULL DEFAULT '',
+        submitted_at TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'pending',
+        attempts INTEGER NOT NULL DEFAULT 0,
+        feed_url TEXT,
+        type TEXT,
+        fit INTEGER,
+        reason TEXT,
+        source_id TEXT,
+        checked_at TEXT
+    );
+    CREATE INDEX candidates_status ON candidates(status);
+
+    CREATE TABLE follows (
+        source_id TEXT PRIMARY KEY,
+        state TEXT NOT NULL,
+        via TEXT NOT NULL,
+        changed_at TEXT NOT NULL
+    );
+    """,
 ]
 
 

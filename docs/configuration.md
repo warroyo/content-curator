@@ -34,9 +34,11 @@ publish:
   collection: AI picks           # Raindrop collection, created on the first publish
   inbox_collection: To curate    # links you save here are scored and moved into the picks; empty = off
   icon: sparkle                  # icon for the collections the curator creates
+  follow_tag: follow             # tag a pick with it in Raindrop to follow its source; empty = off
+  unfollow_tag: unfollow         # tag a pick with it to drop its source; empty = off
 ```
 
-Jobs: `collect`, `score`, `curate`, `run`. Restart the service after changing the schedule. Write weekdays as names (`sun`, `mon-fri`): APScheduler numbers them from Monday, unlike cron, so a numeric weekday is rejected. `curator curate --publish` or `--dry-run` (and the same on `run`) overrides `publish.enabled` for one run; the scheduler and the API follow it.
+Jobs: `collect`, `score`, `curate`, `run`, `discover`, `candidates`. Restart the service after changing the schedule. Write weekdays as names (`sun`, `mon-fri`): APScheduler numbers them from Monday, unlike cron, so a numeric weekday is rejected. `curator curate --publish` or `--dry-run` (and the same on `run`) overrides `publish.enabled` for one run; the scheduler and the API follow it.
 
 All three files are read from `CURATOR_CONFIG_DIR`. `sources.yaml` and `interests.yaml` are read at the start of every job, so an edit applies from the next run without a restart; a schedule change in `app.yaml` needs one. The files in `config/` here are defaults for local runs; a deployment mounts its own. In the home lab, dev-environment renders them from notes in the Obsidian vault.
 
@@ -57,7 +59,7 @@ sources:
     apple_id: 1406537385       # podcasts only, optional: looked up from the feed URL when missing
 ```
 
-Removing a source from the file disables it in the database; its items stay. `import-opml` adds feeds not already present (by normalized URL), uses the OPML folder as the topic, and rewrites the file, which drops comments.
+Removing a source from the file disables it in the database; its items stay. Sources found by discovery and followed from Raindrop are not in the file and are not affected by it; a source unfollowed from Raindrop stays off even if the file lists it. `import-opml` adds feeds not already present (by normalized URL), uses the OPML folder as the topic, and rewrites the file, which drops comments.
 
 ## interests.yaml
 
@@ -103,6 +105,19 @@ Removing a source from the file disables it in the database; its items stay. `im
 | `max_judged` | 30 | candidate shows sent to the chat model per run |
 | `min_fit` | 7 | fit (0-10) needed for a trial |
 | `max_new_per_run` | 5 | trials added per run |
-| `trial_days` | 30 | a trial with no pick in this many days is dropped |
+| `trial_days` | 30 | a trial is dropped after this many days unless followed |
+
+- `feed_discovery`: checks of feeds suggested through `POST /api/candidates`.
+
+| Key | Default | Meaning |
+|---|---|---|
+| `enabled` | true | turn the check off; suggestions still queue |
+| `max_checked` | 30 | pending suggestions checked per run, oldest first |
+| `max_new_per_run` | 5 | trials added per run |
+| `max_active_trials` | 10 | most trials running at once, podcasts included |
+| `min_fit` | 7 | fit (0-10) needed for a trial |
+| `active_within_days` | 60 | the newest entry must be at most this old |
+| `max_per_week` | 10 | reject feeds with more entries than this in the last 7 days |
+| `trial_days` | 30 | a trial is dropped after this many days unless followed |
 
 A discovery pick needs `outside_interests`, discovery value 7+, and depth and source quality 5+.
