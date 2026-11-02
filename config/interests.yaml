@@ -4,35 +4,35 @@ groups:
     tag: topic-ai
     weight: 1.0
     topics:
-      - {name: AI agents and orchestration, weight: 1.0}
+      - {name: "AI agents and orchestration", weight: 1.0}
       - {name: "Agent identity, authentication, and authorization", weight: 1.0}
-      - {name: MCP and agent tooling, weight: 0.9}
-      - {name: Local inference and model serving (llama.cpp, vLLM, AMD Strix Halo, quantization), weight: 0.9}
-      - {name: LLM architecture and emerging techniques, weight: 0.7}
+      - {name: "MCP and agent tooling", weight: 0.9}
+      - {name: "Local inference and model serving (llama.cpp, vLLM, AMD Strix Halo, quantization)", weight: 0.9}
+      - {name: "LLM architecture and emerging techniques", weight: 0.7}
 
   - name: Infrastructure and cloud native
     tag: topic-kubernetes
     weight: 0.9
     topics:
-      - {name: Kubernetes, weight: 1.0}
-      - {name: Platform engineering, weight: 0.8}
-      - {name: VMware Cloud Foundation, vSphere Supervisor and VKS, weight: 0.9}
+      - {name: "Kubernetes", weight: 1.0}
+      - {name: "Platform engineering", weight: 0.8}
+      - {name: "VMware Cloud Foundation, vSphere Supervisor and VKS", weight: 0.9}
 
   - name: Infrastructure automation, networking and security
     tag: topic-infrastructure
     weight: 0.8
     topics:
-      - {name: Infrastructure automation (Terraform, Ansible, GitOps), weight: 0.8}
-      - {name: Networking and security, weight: 0.7}
+      - {name: "Infrastructure automation (Terraform, Ansible, GitOps)", weight: 0.8}
+      - {name: "Networking and security", weight: 0.7}
 
   - name: Technology
     tag: topic-technology
     weight: 0.6
     topics:
-      - {name: Developer tools, weight: 0.8}
-      - {name: Computing hardware, weight: 0.6}
-      - {name: Emerging technologies, weight: 0.5}
-      - {name: Interesting engineering projects, weight: 0.6}
+      - {name: "Developer tools", weight: 0.8}
+      - {name: "Computing hardware", weight: 0.6}
+      - {name: "Emerging technologies", weight: 0.5}
+      - {name: "Interesting engineering projects", weight: 0.6}
 
 exclusions:
   - Funding rounds, earnings and stock news
