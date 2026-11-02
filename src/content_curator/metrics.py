@@ -21,6 +21,9 @@ MODEL_TOKENS = Counter("curator_model_tokens_total", "Model tokens", ["kind"])
 ITEMS_EMBEDDED = Counter("curator_items_embedded_total", "Items embedded")
 STORIES = Gauge("curator_stories", "Same-story groups among fresh items at the last grouping")
 TRIAL_SHOWS_ADDED = Counter("curator_trial_shows_added_total", "Podcast shows added as trial sources")
+TRIAL_FEEDS_ADDED = Counter("curator_trial_feeds_added_total", "Suggested feeds added as trial sources")
+CANDIDATES_REJECTED = Counter("curator_candidates_rejected_total", "Suggested feeds rejected by the checks")
+FOLLOWS = Counter("curator_follows_total", "Sources followed or unfollowed from Raindrop tags", ["state"])
 PICKS = Counter("curator_picks_total", "Items picked", ["bucket"])
 PUBLISHED = Counter("curator_published_total", "Picks sent to Raindrop", ["status"])
 PUBLISH_FAILURES = Counter("curator_publish_failures_total", "Curate runs whose publish to Raindrop failed")
@@ -32,6 +35,8 @@ def record(job: str, stats: dict) -> None:
         ITEMS_FETCHED.inc(stats.get("new_items", 0))
         FETCH_FAILURES.inc(stats.get("fetch_failures", 0))
         DUPLICATES.inc(stats.get("duplicates", 0))
+        for state in ("followed", "unfollowed"):
+            FOLLOWS.labels(state).inc(stats.get(state, 0))
     elif job == "score":
         ITEMS_SCORED.inc(stats.get("scored", 0))
         SCORE_FAILURES.inc(stats.get("failures", 0))
@@ -43,6 +48,10 @@ def record(job: str, stats: dict) -> None:
             STORIES.set(stats["stories"])
     elif job == "discover":
         TRIAL_SHOWS_ADDED.inc(stats.get("added", 0))
+        record("candidates", stats.get("feeds", {}))
+    elif job == "candidates":
+        TRIAL_FEEDS_ADDED.inc(stats.get("added", 0))
+        CANDIDATES_REJECTED.inc(len(stats.get("rejected", [])))
     elif job == "curate":
         for bucket, n in stats.get("buckets", {}).items():
             PICKS.labels(bucket).inc(n)

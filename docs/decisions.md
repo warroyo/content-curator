@@ -67,3 +67,13 @@ On the first run with podcasts, no episode was picked: most feeds give only show
 **Decision.** GitHub Actions tests every push and publishes the runtime image to GHCR on pushes to main. dev-environment pins an image by digest and mounts a config directory. The repo and the image are public, so the server needs no registry login; nothing secret is in either. The curator reads only YAML from `/config`. Where that YAML comes from is the deployment's business: in the home lab, dev-environment renders it from two notes in the private Obsidian vault, which are easier to read and edit than YAML files.
 
 **Alternatives rejected.** Building the image on the server from a clone (mixes build and deploy). A private image with a read-only registry token (more moving parts for no secret). Teaching the curator to read markdown notes (ties the application to one person's note format). Config in dev-environment (public, and tuning preferences would mean a pull request).
+
+## 2026-11-01: feed discovery from suggestions, following through Raindrop tags
+
+**Context.** Finding good blogs was the curator's weakest point: podcast discovery had Apple's directory to search, feeds had nothing. A one-off web search by an agent found 27 candidates, and the sources it found were added by hand. That should be regular, and following a source should not mean editing a file.
+
+**Decision.** The curator takes suggestions through `POST /api/candidates` and does the checking itself: find the feed, check it parses, is recent, is not a firehose or a GitHub release feed, then let the chat model judge fit. Passing feeds run as trials, like podcast trials. Following and dropping are `follow` and `unfollow` tags on picks in Raindrop, read on every collect; the decisions live in the database. A trial ends after `trial_days` unless followed, picked or not, so the trial list cannot grow without bound.
+
+**Alternatives rejected.** Searching the web from the curator (needs a search API and is a different job; any agent or person can suggest instead). Letting the suggester validate feeds (a local model gets fetch-and-parse wrong; code does not). Writing followed sources back to `sources.yaml` or to the deployment's notes (ties the application to one deployment's config format; the config stays a hand-kept base list). Keeping picked trials forever (the old rule, which left trials nobody decided on).
+
+**Consequences.** The full source list is `sources.yaml` plus the database: `GET /api/sources` shows it. Who suggests feeds, and how, is the deployment's business; in the home lab a weekly Hermes job does. Podcast trials with picks that were never followed now end at `trial_days` like the rest; following one from an old pick brings it back.

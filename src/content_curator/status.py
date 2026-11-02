@@ -26,8 +26,9 @@ def status(conn: sqlite3.Connection, max_age_days: int = 7) -> dict:
         "extraction": {r[0]: r[1] for r in conn.execute("SELECT extraction, COUNT(*) FROM items GROUP BY 1")},
         "media": {r[0]: r[1] for r in conn.execute("SELECT media, COUNT(*) FROM items GROUP BY 1")},
         "trial_shows": [dict(r) for r in conn.execute(
-            "SELECT id, name, discovery_query, discovered_at FROM sources WHERE discovery='trial' AND enabled=1"
+            "SELECT id, name, type, discovery_query, discovered_at FROM sources WHERE discovery='trial' AND enabled=1"
         )],
+        "candidates": {r[0]: r[1] for r in conn.execute("SELECT status, COUNT(*) FROM candidates GROUP BY 1")},
         "avg_score_ms": one("SELECT CAST(AVG(duration_ms) AS INTEGER) FROM scores"),
         "last_runs": [
             {**dict(r), "stats": json.loads(r["stats"])}
@@ -37,6 +38,36 @@ def status(conn: sqlite3.Connection, max_age_days: int = 7) -> dict:
             )
         ],
     }
+
+
+def sources(conn: sqlite3.Connection) -> list[dict]:
+    """Every source the curator knows, with its status and how many of its items were picked.
+
+    status: configured (from sources.yaml), trial, followed (a trial you kept), unfollowed,
+    expired (a trial that ended), removed (no longer in sources.yaml).
+    """
+    rows = conn.execute(
+        """SELECT s.id, s.name, s.url, s.type, s.enabled, s.discovery, s.discovered_at, s.discovery_query,
+                  s.last_success_at, s.consecutive_failures, s.items_seen, f.state AS follow, f.changed_at AS follow_at,
+                  (SELECT COUNT(DISTINCT sel.item_id) FROM selections sel JOIN items i ON i.id = sel.item_id
+                   WHERE i.source_id = s.id AND sel.selected = 1) AS picks
+           FROM sources s LEFT JOIN follows f ON f.source_id = s.id
+           WHERE s.id != 'manual' ORDER BY s.discovery, s.name"""
+    ).fetchall()
+    out = []
+    for r in rows:
+        d = dict(r)
+        d["enabled"] = bool(d["enabled"])
+        if d["follow"] == "unfollowed":
+            d["status"] = "unfollowed"
+        elif d["discovery"] == "followed":
+            d["status"] = "followed"
+        elif d["discovery"] == "trial":
+            d["status"] = "trial" if d["enabled"] else "expired"
+        else:
+            d["status"] = "configured" if d["enabled"] else "removed"
+        out.append(d)
+    return out
 
 
 PICK_COLUMNS = """

@@ -88,8 +88,8 @@ stories:
   embed_words: 300
 
 # Weekly search of Apple Podcasts for new shows. The best new, active technology show per
-# query is tried for trial_days; its picks are marked in the report, and following it is
-# adding it to sources.yaml. A trial show with no pick is dropped.
+# query is tried for trial_days; its picks are marked in the report. Following it is a
+# `follow` tag on one of its picks in Raindrop; otherwise it is dropped when the trial ends.
 podcast_discovery:
   enabled: true
   queries:
@@ -105,4 +105,17 @@ podcast_discovery:
     - computer hardware
   max_new_per_run: 5
   active_within_days: 30
+  trial_days: 30
+
+# Feeds suggested through POST /api/candidates, checked weekly (and by `curator candidates`):
+# the feed must parse, have posted within active_within_days, post at most max_per_week items a
+# week and not be a GitHub release feed; then the chat model judges fit. The best run as trials.
+feed_discovery:
+  enabled: true
+  max_checked: 30
+  max_new_per_run: 5
+  max_active_trials: 10
+  min_fit: 7
+  active_within_days: 60
+  max_per_week: 10
   trial_days: 30

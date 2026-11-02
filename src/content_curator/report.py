@@ -31,8 +31,9 @@ def _pick(d: Decision) -> str:
         where.append(f"[episode page]({c.url})")
         also += f"\nListen: {' · '.join(where)}\n"
     if c.trial:
-        also += (f"\nFrom **{c.source_name}**, a show found by discovery that you do not follow yet. "
-                 f"To follow it, add it to `sources.yaml`.\n")
+        kind = "a show" if c.media == "podcast" else "a source"
+        also += (f"\nFrom **{c.source_name}**, {kind} found by discovery that you do not follow yet. "
+                 f"Tag the pick `follow` in Raindrop to keep it, `unfollow` to drop it.\n")
     if c.also:
         links = ", ".join(f"[{src}]({url})" for src, _, url in c.also)
         also += f"\nAlso covered by: {links}\n"
@@ -43,6 +44,14 @@ def _pick(d: Decision) -> str:
         f"**{c.overall}** overall, {d.bucket} ({d.reason}). {dims}. Topics: {tags}\n\n"
         f"> {c.explanation}\n{also}"
     )
+
+
+def _trial(t: dict) -> str:
+    picks = t.get("picks") or 0
+    found = (t["discovery_query"] or "").strip()
+    found = found if found.startswith("suggested by") else f'found for "{found}"'
+    return (f"- **{_md(t['name'])}** (`{t['id']}`, {t.get('type') or 'rss'}): {picks} "
+            f"pick{'' if picks == 1 else 's'}, {_md(found)} on {(t['discovered_at'] or '')[:10]}. {t['url']}")
 
 
 def render(result: Result, stats: dict, dry_run: bool, trials: list[dict] | None = None) -> str:
@@ -70,11 +79,17 @@ def render(result: Result, stats: dict, dry_run: bool, trials: list[dict] | None
         lines.append(f"| {c.overall} | [{_md(c.title)}]({c.url}) | {_md(c.source_name)} | {_md(d.reason)} |")
     active = [t for t in trials or [] if t["enabled"]]
     if active:
-        lines += ["", "## Shows on trial", "",
-                  "Found by podcast discovery and collected for a trial period. To keep one, add it to "
-                  "`sources.yaml` with `type: podcast`.", ""]
-        lines += [f"- **{_md(t['name'])}** ({t['url']}), found for \"{_md(t['discovery_query'] or '')}\" "
-                  f"on {(t['discovered_at'] or '')[:10]}" for t in active]
+        ready = [t for t in active if t.get("picks")]
+        lines += ["", "## Sources on trial", "",
+                  "Found by discovery and collected for a trial period, then dropped unless you follow them. "
+                  "To keep one, tag one of its picks `follow` in Raindrop "
+                  "(or `POST /api/sources/<id>/follow`).", ""]
+        if ready:
+            lines += ["Ready to follow (picked at least once):", ""]
+            lines += [_trial(t) for t in ready] + [""]
+        rest = [t for t in active if not t.get("picks")]
+        if rest:
+            lines += ["No pick yet:", ""] + [_trial(t) for t in rest]
     lines += ["", "## Run stats", "", "```"]
     lines += [f"{k}: {v}" for k, v in stats.items()]
     lines += ["```", ""]

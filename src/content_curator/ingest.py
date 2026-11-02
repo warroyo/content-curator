@@ -38,8 +38,9 @@ def http_client(settings: Settings) -> httpx.Client:
 def sync_sources(conn: sqlite3.Connection, sources: list[Source]) -> None:
     """Make the sources table match sources.yaml. Sources removed from the file are disabled, not deleted.
 
-    Trial sources found by discovery are not in the file and are left alone; adding one to the file
-    takes it over as an ordinary approved source.
+    Trial and followed sources found by discovery are not in the file and are left alone; adding one
+    to the file (same id or same URL) takes it over as an ordinary source. An unfollowed source stays
+    disabled even if the file lists it.
     """
     conn.execute("BEGIN")
     for s in sources:
@@ -59,8 +60,17 @@ def sync_sources(conn: sqlite3.Connection, sources: list[Source]) -> None:
         )
     ids = [s.id for s in sources]
     conn.execute(
-        f"UPDATE sources SET enabled=0 WHERE discovery != 'trial' AND id NOT IN ({','.join('?' * len(ids))})", ids
+        f"UPDATE sources SET enabled=0 WHERE discovery NOT IN ('trial', 'followed') "
+        f"AND id NOT IN ({','.join('?' * len(ids))})", ids
     )
+    listed = {normalize_url(s.url) for s in sources}
+    discovered = conn.execute(
+        "SELECT id, url FROM sources WHERE discovery IN ('trial', 'followed') AND enabled=1"
+    ).fetchall()
+    for row in discovered:
+        if row["id"] not in ids and normalize_url(row["url"]) in listed:
+            conn.execute("UPDATE sources SET enabled=0 WHERE id=?", (row["id"],))
+    conn.execute("UPDATE sources SET enabled=0 WHERE id IN (SELECT source_id FROM follows WHERE state='unfollowed')")
     conn.execute("COMMIT")
 
 

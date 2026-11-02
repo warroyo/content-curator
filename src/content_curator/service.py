@@ -3,18 +3,20 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import time
 from contextlib import asynccontextmanager
 
+import yaml
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
-from fastapi import Depends, FastAPI, Header, HTTPException, Query
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
 from fastapi.responses import PlainTextResponse
 from prometheus_client import make_asgi_app
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
-from content_curator import __version__, db
+from content_curator import __version__, db, registry
 from content_curator import status as queries
 from content_curator.config import Settings, load_app_config, load_interests
 from content_curator.jobs import JOBS, JobBusy, JobRunner
@@ -150,6 +152,48 @@ def create_app(settings: Settings, runner: JobRunner | None = None, scheduler_en
         if item_id is None:
             raise HTTPException(409, "URL already known")
         return {"item_id": item_id}
+
+    @app.post("/api/candidates", dependencies=[Depends(authorized)])
+    async def add_candidates(request: Request, by: str = Query("", max_length=64)):
+        """Suggest sources to try. Body: JSON or YAML, a list of {url, name, topics, why} or
+        {"submitted_by": ..., "candidates": [...]}. Checked by the next `candidates` or `discover` job."""
+        raw = await request.body()
+        try:
+            body = json.loads(raw) if raw.lstrip()[:1] in (b"[", b"{") else yaml.safe_load(raw)
+        except (json.JSONDecodeError, yaml.YAMLError) as e:
+            raise HTTPException(400, f"body is neither JSON nor YAML: {e}") from None
+        if isinstance(body, dict):
+            by = by or str(body.get("submitted_by") or "")
+            body = body.get("candidates")
+        if not isinstance(body, list):
+            raise HTTPException(400, "expected a list of candidates, or an object with a 'candidates' list")
+        try:
+            entries = [registry.CandidateIn.model_validate(e) for e in body]
+        except ValidationError as e:
+            raise HTTPException(422, e.errors(include_url=False, include_context=False)) from None
+        # async, to read a raw body; the connection is opened here because sync dependencies run in
+        # another thread and sqlite connections stay in the thread that made them.
+        c = db.connect(settings.db_path)
+        try:
+            return registry.add_candidates(c, entries, by)
+        finally:
+            c.close()
+
+    @app.get("/api/candidates")
+    def get_candidates(status: str | None = Query(None), c=Depends(conn)):
+        return registry.list_candidates(c, status)
+
+    @app.get("/api/sources")
+    def get_sources(c=Depends(conn)):
+        return queries.sources(c)
+
+    @app.post("/api/sources/{source_id}/{action}", dependencies=[Depends(authorized)])
+    def follow(source_id: str, action: str, c=Depends(conn)):
+        if action not in ("follow", "unfollow"):
+            raise HTTPException(404, "action is follow or unfollow")
+        if not registry.set_follow(c, source_id, f"{action}ed", via="api"):
+            raise HTTPException(404, f"no source {source_id!r}")
+        return {"source": source_id, "state": f"{action}ed"}
 
     @app.get("/api/reports/latest", response_class=PlainTextResponse)
     def latest_report():

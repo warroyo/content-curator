@@ -9,6 +9,9 @@ with `import/url/parse` for its type and cover; the title and note come from the
 The inbox collection ("To curate") works the other way: links saved there are pulled in by
 `collect`, scored overnight like any item, and the same raindrop is moved into the picks collection
 with the explanation added to its note. Moving, not copying, keeps your own note and highlights.
+
+Follow and unfollow are tags too: `follow` or `unfollow` on a pick, anywhere in the account, follows
+or drops the source it came from on the next `collect`, and the curator removes the tag.
 """
 
 from __future__ import annotations
@@ -105,6 +108,19 @@ class Raindrop:
                 return out
             page += 1
 
+    def tagged(self, tag: str) -> list[dict]:
+        """Every raindrop in the account carrying this tag (collection 0 is all of them)."""
+        out: list[dict] = []
+        page = 0
+        while True:
+            items = self._call("GET", "/raindrops/0",
+                               params={"search": f"#{tag}", "perpage": PAGE, "page": page}).get("items", [])
+            # Raindrop's search matches tag prefixes too; keep exact matches only.
+            out += [r for r in items if tag in (r.get("tags") or [])]
+            if len(items) < PAGE:
+                return out
+            page += 1
+
     def update(self, raindrop_id: int, fields: dict) -> dict:
         return self._call("PUT", f"/raindrop/{raindrop_id}", json=fields).get("item", {})
 
@@ -145,7 +161,7 @@ def tags_for(d: Decision) -> list[str]:
     if d.bucket == "submitted":
         tags.append("ai-submitted")
     if c.trial:
-        tags.append("ai-trial-show")
+        tags.append("ai-trial-show" if c.media == "podcast" else "ai-trial-source")
     return list(dict.fromkeys(tags))
 
 
@@ -153,7 +169,9 @@ def note_for(c: Candidate) -> str:
     """The why-this-item explanation, shown on the card under the title."""
     parts = [c.explanation.strip()]
     if c.trial:
-        parts.append(f"From {c.source_name}, a show on trial that you do not follow yet.")
+        kind = "a show" if c.media == "podcast" else "a source"
+        parts.append(f"From {c.source_name}, {kind} on trial that you do not follow yet. "
+                     f"Tag this follow to keep it, or unfollow to drop it.")
     if c.also:
         parts.append("Also covered by: " + ", ".join(f"{src} ({url})" for src, _, url in c.also))
     return "\n\n".join(p for p in parts if p)
@@ -217,6 +235,34 @@ def pull_inbox(conn: sqlite3.Connection, settings: Settings, cfg: Publish, clien
         stats["inbox_new"] += 1
     if stats["inbox_new"]:
         log.info("inbox pulled", extra=stats)
+    return stats
+
+
+def apply_follow_tags(conn: sqlite3.Connection, cfg: Publish, client: Raindrop) -> dict:
+    """Follow or unfollow the source of every pick tagged `follow_tag` / `unfollow_tag`, then drop the tag.
+
+    A tagged raindrop the curator did not publish (or one from a hand-submitted link, which has no
+    source) keeps its tag and is counted as unknown.
+    """
+    from content_curator.registry import set_follow
+
+    stats = {"followed": 0, "unfollowed": 0, "follow_tag_unknown": 0}
+    for tag, state in ((cfg.follow_tag, "followed"), (cfg.unfollow_tag, "unfollowed")):
+        if not tag:
+            continue
+        for r in client.tagged(tag):
+            rid = int(r["_id"])
+            row = conn.execute(
+                "SELECT i.source_id FROM published p JOIN items i ON i.id = p.item_id WHERE p.raindrop_id = ?",
+                (rid,),
+            ).fetchone()
+            if row is None or not set_follow(conn, row["source_id"], state, via="raindrop"):
+                stats["follow_tag_unknown"] += 1
+                continue
+            client.update(rid, {"tags": [t for t in r.get("tags") or [] if t != tag]})
+            stats[state] += 1
+    if stats["followed"] or stats["unfollowed"]:
+        log.info("follow tags applied", extra=stats)
     return stats
 
 
