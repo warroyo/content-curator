@@ -375,6 +375,19 @@ def discover_feeds(conn: sqlite3.Connection, settings: Settings, interests: Inte
             except Rejected as e:
                 reject(row, str(e))
                 continue
+            except httpx.HTTPStatusError as e:
+                code = e.response.status_code
+                if 400 <= code < 500 and code not in (408, 429):
+                    # Gone, missing, or blocking the curator: nightly collection would fail the same way.
+                    reject(row, f"HTTP {code} from {e.request.url}")
+                    continue
+                attempts = row["attempts"] + 1
+                if attempts >= MAX_ATTEMPTS:
+                    reject(row, f"fetch failed {attempts} times: HTTP {code}")
+                else:
+                    conn.execute("UPDATE candidates SET attempts=?, reason=? WHERE url=?",
+                                 (attempts, f"fetch failed: HTTP {code}", row["url"]))
+                continue
             except httpx.HTTPError as e:
                 attempts = row["attempts"] + 1
                 if attempts >= MAX_ATTEMPTS:

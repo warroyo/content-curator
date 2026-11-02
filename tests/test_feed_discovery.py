@@ -51,6 +51,10 @@ def handler(request: httpx.Request) -> httpx.Response:
     fetches.append(url)
     if url == "https://down.test/feed":
         raise httpx.ConnectError("refused")
+    if url == "https://blocked.test/":
+        return httpx.Response(403)
+    if url == "https://busy.test/":
+        return httpx.Response(429)
     if url not in FEEDS:
         return httpx.Response(404)
     status, body, ctype = FEEDS[url]
@@ -153,6 +157,15 @@ def test_unreachable_feed_is_rejected_after_three_tries(conn, settings):
         discover_feeds(conn, settings, interests, client=client(), judge=FakeFeedJudge({}))
     row = conn.execute("SELECT status, reason FROM candidates").fetchone()
     assert row["status"] == "rejected" and row["reason"].startswith("fetch failed 3 times")
+
+
+def test_client_errors_reject_at_once_but_rate_limits_retry(conn, settings):
+    interests = load_interests(settings.config_dir)
+    add_candidates(conn, [CandidateIn(url="https://blocked.test/"), CandidateIn(url="https://busy.test/")])
+    discover_feeds(conn, settings, interests, client=client(), judge=FakeFeedJudge({}))
+    rows = {r["submitted_url"]: (r["status"], r["reason"]) for r in conn.execute("SELECT * FROM candidates")}
+    assert rows["https://blocked.test/"] == ("rejected", "HTTP 403 from https://blocked.test/")
+    assert rows["https://busy.test/"] == ("pending", "fetch failed: HTTP 429")
 
 
 def test_trials_end_after_trial_days_picked_or_not(conn):
