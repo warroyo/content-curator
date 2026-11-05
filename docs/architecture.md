@@ -103,7 +103,22 @@ Raindrop has no read state, so the picks collection would only grow. Feedback is
 | tag a pick `meh` | records `meh` (less like this: its topics and source), removes the tag, moves the pick to "AI skipped" |
 | delete a pick | records `deleted` (a light negative: not this one) from the Trash |
 
-A tagged pick moves only if it is still in the collection it was published to; one you moved elsewhere keeps its place and loses the tag. A tag on a raindrop the curator did not publish is left alone. A deletion is seen only while the pick is in the Trash, so emptying the Trash before the next run loses it. Nothing is moved that you did not tag, and untouched picks stay in "AI picks". The `feedback` table only records for now; preference learning will use it. `curator status` shows the last 7 days as `feedback_7d`.
+A tagged pick moves only if it is still in the collection it was published to; one you moved elsewhere keeps its place and loses the tag. A tag on a raindrop the curator did not publish is left alone. A deletion is seen only while the pick is in the Trash, so emptying the Trash before the next run loses it. Nothing is moved that you did not tag, and untouched picks stay in "AI picks". `curator status` shows the last 7 days as `feedback_7d`.
+
+A favourite (Raindrop's heart, `important`) is recorded too, by `collect` before each nightly curate, from the curator's own collections ("AI picks", "AI read", "AI skipped") for picks published in the last 90 days. Unfavouriting removes it. A favourite on a pick you moved to a collection of your own is not seen.
+
+## Preference learning
+
+Every curate run works out, from the `feedback` table, two adjustments to each candidate's overall score. Nothing learned is stored, so `learning.since` resets it and the history stays.
+
+- **Source.** Each signal is weighted (favourite +2, meh -2, deleted -0.5, read 0) and halves every 30 days. A source's adjustment is the mean signal on its picks, shrunk toward 0 by 5 neutral signals and scaled to at most ±0.5. One meh moves a source by -0.08; three fresh ones by -0.19.
+- **Similarity.** A candidate whose embedding is at least 0.6 similar to a pick you favourited (or tagged meh) in the last 90 days moves up (or down), more the closer it is, at most ±0.5. Deletions and reads do not count here: a deletion says "not this one", not "less like this".
+
+With `learning.mode: on`, core picks rank by the overall score plus the adjustment. A positive adjustment never lifts an item over `min_score`; a negative one can drop it below. Discovery slots and the daily listen ignore it, so feedback does not narrow what lies outside the stated interests. Each pick the adjustment touched says why in the report ("Learned +0.3: similar +0.3: like "X" you favourited (0.74)").
+
+The default is `shadow`: the report gets a "Learning (shadow)" section with the picks learning would add and drop and the biggest adjustments, and the picks do not change. Switch to `on` once those look right.
+
+Scoring by the model is unchanged: feedback never goes into the prompt, so scores stay cached and every adjustment can be explained.
 
 ## Podcasts
 

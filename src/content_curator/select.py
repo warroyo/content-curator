@@ -43,6 +43,13 @@ class Candidate:
     minutes: int = 0
     # Other items covering the same story, best first: (source_name, title, url).
     also: list[tuple[str, str, str]] = field(default_factory=list)
+    # Adjustment learned from feedback on earlier picks (learning.py), and why.
+    learned: float = 0.0
+    learned_why: str = ""
+
+    @property
+    def adjusted(self) -> float:
+        return round(self.overall + self.learned, 2)
 
     @property
     def discovery_score(self) -> float:
@@ -80,7 +87,10 @@ def prepare(c: Candidate, sel: Selection, weights: Weights) -> Candidate:
     return c
 
 
-def select(candidates: list[Candidate], sel: Selection, weights: Weights) -> Result:
+def select(candidates: list[Candidate], sel: Selection, weights: Weights, learn: bool = False) -> Result:
+    """With `learn`, core picks rank by overall plus the learned adjustment. A positive adjustment
+    never lifts an item over `min_score`; a negative one can drop it below. Discovery and reserved
+    slots ignore it, so what lies outside the stated interests is not narrowed by past feedback."""
     for c in candidates:
         prepare(c, sel, weights)
     candidates = collapse_stories(candidates)
@@ -136,15 +146,22 @@ def select(candidates: list[Candidate], sel: Selection, weights: Weights) -> Res
             break
         try_take(c, "discovery", f"discovery score {c.discovery_score} outside stated interests")
 
-    core = sorted(candidates, key=lambda c: (-c.overall, -c.depth, -c.relevance))
+    def rank_score(c: Candidate) -> float:
+        return c.adjusted if learn else c.overall
+
+    def clears(c: Candidate) -> bool:
+        return min(c.overall, rank_score(c)) >= sel.min_score
+
+    core = sorted(candidates, key=lambda c: (-rank_score(c), -c.depth, -c.relevance))
     for c in core:
         if counted() >= sel.daily_count:
             break
-        if c.item_id in taken:
+        if c.item_id in taken or not clears(c):
             continue
-        if c.overall < sel.min_score:
-            break
-        try_take(c, "core", f"overall {c.overall}")
+        reason = f"overall {c.overall}"
+        if learn and c.learned:
+            reason += f", learned {c.learned:+g}"
+        try_take(c, "core", reason)
 
     # Reserved and discovery slots are filled first so core picks cannot crowd them out, but they
     # read last: core, then discovery, then the listen.
@@ -155,7 +172,7 @@ def select(candidates: list[Candidate], sel: Selection, weights: Weights) -> Res
 
     skipped_ids = {d.candidate.item_id for d in skipped}
     rest = [
-        Decision(c, False, "skipped", "below threshold" if c.overall < sel.min_score else "daily budget full")
+        Decision(c, False, "skipped", "daily budget full" if clears(c) else "below threshold")
         for c in core
         if c.item_id not in taken and c.item_id not in skipped_ids
     ]

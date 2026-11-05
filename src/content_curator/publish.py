@@ -25,6 +25,7 @@ import json
 import logging
 import sqlite3
 import time
+from datetime import UTC, datetime, timedelta
 
 import httpx
 
@@ -41,6 +42,8 @@ BATCH = 100
 RETRIES = 3
 PAGE = 50
 TRASH = -99
+# Favourites are looked for on picks published this recently.
+FAVOURITE_DAYS = 90
 
 DESCRIPTIONS = {
     "picks": "Nightly picks from content-curator. The note on each says why it was picked.",
@@ -105,16 +108,32 @@ class Raindrop:
             pass
         return None
 
-    def raindrops(self, collection: int) -> list[dict]:
+    def raindrops(self, collection: int, newer_than: str | None = None) -> list[dict]:
+        """A collection's raindrops; with `newer_than` (ISO time), newest first down to that time."""
         out: list[dict] = []
         page = 0
+        params: dict = {"perpage": PAGE}
+        if newer_than:
+            params["sort"] = "-created"
         while True:
-            items = self._call("GET", f"/raindrops/{collection}",
-                               params={"perpage": PAGE, "page": page}).get("items", [])
-            out += items
+            items = self._call("GET", f"/raindrops/{collection}", params={**params, "page": page}).get("items", [])
+            if newer_than:
+                fresh = [r for r in items if (r.get("created") or "") >= newer_than]
+                out += fresh
+                if len(fresh) < len(items):
+                    return out
+            else:
+                out += items
             if len(items) < PAGE:
                 return out
             page += 1
+
+    def find_collection(self, title: str) -> int | None:
+        """Id of the root collection with this title, or None; never creates one."""
+        for c in self._call("GET", "/collections").get("items", []):
+            if c.get("title") == title:
+                return int(c["_id"])
+        return None
 
     def tagged(self, tag: str) -> list[dict]:
         """Every raindrop in the account carrying this tag (collection 0 is all of them)."""
@@ -311,6 +330,35 @@ def apply_feedback(conn: sqlite3.Connection, cfg: Publish, client: Raindrop) -> 
                 stats["deleted"] += 1
     if any(stats.values()):
         log.info("feedback applied", extra=stats)
+    return stats
+
+
+def sync_favourites(conn: sqlite3.Connection, cfg: Publish, client: Raindrop) -> dict:
+    """Record picks you favourited (Raindrop's `important`), and forget ones you unfavourited.
+
+    Reads the curator's own collections (picks, read, skipped), newest first, back to
+    FAVOURITE_DAYS: a favourite on a pick you moved to a collection of your own is not seen.
+    """
+    published = dict(conn.execute("SELECT raindrop_id, item_id FROM published").fetchall())
+    stats = {"favourite": 0, "unfavourited": 0}
+    if not published:
+        return stats
+    since = (datetime.now(UTC) - timedelta(days=FAVOURITE_DAYS)).strftime("%Y-%m-%dT%H:%M:%S")
+    for title in dict.fromkeys(t for t in (cfg.collection, cfg.read_collection, cfg.skipped_collection) if t):
+        collection = client.find_collection(title)
+        if collection is None:
+            continue
+        for r in client.raindrops(collection, newer_than=since):
+            rid = int(r["_id"])
+            if rid not in published:
+                continue
+            if r.get("important"):
+                stats["favourite"] += _record_feedback(conn, published[rid], "favourite", rid)
+            else:
+                stats["unfavourited"] += conn.execute(
+                    "DELETE FROM feedback WHERE item_id = ? AND kind = 'favourite'", (published[rid],)).rowcount
+    if any(stats.values()):
+        log.info("favourites synced", extra=stats)
     return stats
 
 

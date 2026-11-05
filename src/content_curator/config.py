@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from typing import Literal
 
 import yaml
 from pydantic import BaseModel, Field, field_validator
@@ -187,6 +188,36 @@ class FeedDiscovery(BaseModel):
     trial_days: int = 30
 
 
+class Learning(BaseModel):
+    """Learning from what you do with picks in Raindrop (the feedback table).
+
+    Two adjustments to a candidate's overall score, recomputed every run and never stored: one for
+    its source, from all feedback on that source's picks, and one for being close (by embedding) to
+    a pick you favourited or tagged meh. Only core picks use them; discovery slots do not.
+    """
+
+    # off: ignore feedback. shadow: work the adjustments out and show them in the report, picks
+    # unchanged. on: core picks are ranked by overall plus the adjustment.
+    mode: Literal["off", "shadow", "on"] = "shadow"
+    # Ignore feedback recorded before this date (YYYY-MM-DD): a reset that keeps the history.
+    since: str | None = None
+    # Weight of each kind of feedback; a kind not listed counts 0.
+    weights: dict[str, float] = Field(
+        default_factory=lambda: {"favourite": 2.0, "meh": -2.0, "deleted": -0.5, "read": 0.0})
+    # A signal counts half after this many days.
+    half_life_days: float = 30
+    # A source's mean signal is shrunk toward 0 as if it had this many more neutral signals,
+    # so one meh does not sink a source.
+    source_prior: float = 5
+    source_cap: float = 0.5
+    # A candidate at least this similar (cosine) to a favourite or a meh pick moves up or down,
+    # more the closer it is. 0.6 is about where same-subject pairs start (stories calibration).
+    similar_from: float = 0.6
+    similar_cap: float = 0.5
+    # Only favourites and meh tags this recent count for similarity.
+    similar_days: int = 90
+
+
 class Interests(BaseModel):
     groups: list[TopicGroup]
     exclusions: list[str] = Field(default_factory=list)
@@ -197,6 +228,7 @@ class Interests(BaseModel):
     stories: Stories = Field(default_factory=Stories)
     podcast_discovery: PodcastDiscovery = Field(default_factory=PodcastDiscovery)
     feed_discovery: FeedDiscovery = Field(default_factory=FeedDiscovery)
+    learning: Learning = Field(default_factory=Learning)
 
 
 class ScheduledJob(BaseModel):

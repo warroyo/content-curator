@@ -50,8 +50,10 @@ def data_lock(settings: Settings) -> Iterator[None]:
         yield
 
 
-def _apply_feedback(conn, settings: Settings) -> dict:
-    """Follow/unfollow, read and meh tags, and deleted picks, from Raindrop. Raises PublishError."""
+def _apply_feedback(conn, settings: Settings, favourites: bool = False) -> dict:
+    """Follow/unfollow, read and meh tags, and deleted picks, from Raindrop; with `favourites`, also
+    the picks you favourited, which only learning reads, so once before a curate is enough.
+    Raises PublishError."""
     if not settings.raindrop_token:
         return {}
     from content_curator import publish
@@ -60,6 +62,8 @@ def _apply_feedback(conn, settings: Settings) -> dict:
     client = publish.client_from(settings)
     stats = publish.apply_follow_tags(conn, publish_cfg, client)
     stats.update(publish.apply_feedback(conn, publish_cfg, client))
+    if favourites:
+        stats.update(publish.sync_favourites(conn, publish_cfg, client))
     return stats
 
 
@@ -81,7 +85,7 @@ def collect(settings: Settings, force: bool = False) -> dict:
     try:
         publish_cfg = load_app_config(settings.config_dir).publish
         try:
-            feedback_stats = _apply_feedback(conn, settings)
+            feedback_stats = _apply_feedback(conn, settings, favourites=True)
         except publish.PublishError as e:
             feedback_stats = {"feedback_error": str(e)}
             log.warning("raindrop feedback failed", extra={"error": str(e)})
@@ -163,7 +167,16 @@ def curate(settings: Settings, dry_run: bool | None = None, extra_stats: dict | 
         interests = load_interests(settings.config_dir)
         run = db.Run(conn, "curate")
         candidates = selection.load_candidates(conn, interests)
-        result = selection.select(candidates, interests.selection, interests.scoring.weights)
+        from content_curator import learning
+
+        run.stats.update(learning.apply(conn, interests.learning, candidates))
+        mode = interests.learning.mode
+        shadow = None
+        if mode == "shadow":
+            # What learning would change, for the report; the real selection below ignores it.
+            would = selection.select(candidates, interests.selection, interests.scoring.weights, learn=True)
+            shadow = {d.candidate.item_id: d for d in would.picks}
+        result = selection.select(candidates, interests.selection, interests.scoring.weights, learn=mode == "on")
         # Links saved to the Raindrop inbox come on top of the day's picks, whatever their score.
         submitted = selection.load_submitted(conn)
         for d in submitted:
@@ -187,7 +200,9 @@ def curate(settings: Settings, dry_run: bool | None = None, extra_stats: dict | 
         from content_curator.discover import trial_sources
 
         path = report.write(
-            settings.reports_dir, report.render(result, run.stats, dry_run=dry_run, trials=trial_sources(conn))
+            settings.reports_dir,
+            report.render(result, run.stats, dry_run=dry_run, trials=trial_sources(conn),
+                          learning_mode=mode, shadow=shadow),
         )
         run.stats["report"] = path.name
         if publish_error:
