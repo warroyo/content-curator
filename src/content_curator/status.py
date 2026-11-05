@@ -29,6 +29,9 @@ def status(conn: sqlite3.Connection, max_age_days: int = 7) -> dict:
             "SELECT id, name, type, discovery_query, discovered_at FROM sources WHERE discovery='trial' AND enabled=1"
         )],
         "candidates": {r[0]: r[1] for r in conn.execute("SELECT status, COUNT(*) FROM candidates GROUP BY 1")},
+        "feedback_7d": {r[0]: r[1] for r in conn.execute(
+            "SELECT kind, COUNT(*) FROM feedback WHERE datetime(recorded_at) >= datetime('now', '-7 days') GROUP BY 1"
+        )},
         "avg_score_ms": one("SELECT CAST(AVG(duration_ms) AS INTEGER) FROM scores"),
         "last_runs": [
             {**dict(r), "stats": json.loads(r["stats"])}

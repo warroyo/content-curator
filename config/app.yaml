@@ -9,6 +9,9 @@ schedule:
     # Weekly: search Apple Podcasts for new shows, then check suggested feeds (podcast_discovery
     # and feed_discovery in interests.yaml).
     - {job: discover, cron: "0 1 * * sun"}
+    # Daytime: apply the tags you put on picks (follow, unfollow, read, meh) and record deleted
+    # picks, so a tagged pick leaves "AI picks" within half an hour. No model; a few API calls.
+    - {job: feedback, cron: "*/30 6-23 * * *"}
     # Optional daytime collection, for feeds that publish more than 50 items a day.
     # - {job: collect, cron: "0 13 * * *"}
 
@@ -22,6 +25,13 @@ publish:
   # `collection` with the curator's take. Empty turns it off.
   inbox_collection: To curate
   icon: sparkle
-  # Tag a pick with these in Raindrop to follow or drop its source; read on every collect.
+  # Tag a pick with these in Raindrop to follow or drop its source; read on every collect and
+  # every feedback run.
   follow_tag: follow
   unfollow_tag: unfollow
+  # Tag a pick `read` when done, `meh` for less like this; it moves out of `collection`.
+  # Deleting a pick counts as a light negative. Empty turns a tag off.
+  read_tag: read
+  meh_tag: meh
+  read_collection: AI read
+  skipped_collection: AI skipped

@@ -45,6 +45,7 @@ def main(argv: list[str] | None = None) -> int:
     s = sub.add_parser("collect", help="fetch due sources and extract new items")
     s.add_argument("--force", action="store_true", help="fetch every source, ignoring its interval")
 
+    sub.add_parser("feedback", help="apply follow, unfollow, read and meh tags and deleted picks from Raindrop")
     sub.add_parser("stories", help="embed fresh items and group same-story coverage")
     sub.add_parser("discover", help="find new podcast shows and check suggested feeds, as trial sources")
     sub.add_parser("candidates", help="check suggested feeds (POST /api/candidates) as trial sources")
@@ -84,6 +85,8 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         case "collect":
             return _job(settings, "collect", force=args.force)
+        case "feedback":
+            return _job(settings, "feedback")
         case "discover":
             return _job(settings, "discover")
         case "candidates":

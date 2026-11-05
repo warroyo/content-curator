@@ -28,6 +28,7 @@ schedule:
   misfire_grace_seconds: 3600    # a run missed while the service was down may start this late
   jobs:
     - {job: run, cron: "30 1 * * *"}       # collect, score, curate
+    - {job: feedback, cron: "*/30 6-23 * * *"}  # apply tags on picks, record deletions
     # - {job: collect, cron: "0 13 * * *"}
 publish:
   enabled: false                 # off: every run is a dry run that only writes the report
@@ -36,9 +37,13 @@ publish:
   icon: sparkle                  # icon for the collections the curator creates
   follow_tag: follow             # tag a pick with it in Raindrop to follow its source; empty = off
   unfollow_tag: unfollow         # tag a pick with it to drop its source; empty = off
+  read_tag: read                 # tag a pick when read: recorded, moved to read_collection; empty = off
+  meh_tag: meh                   # less like this: recorded, moved to skipped_collection; empty = off
+  read_collection: AI read
+  skipped_collection: AI skipped
 ```
 
-Jobs: `collect`, `score`, `curate`, `run`, `discover`, `candidates`. Restart the service after changing the schedule. Write weekdays as names (`sun`, `mon-fri`): APScheduler numbers them from Monday, unlike cron, so a numeric weekday is rejected. `curator curate --publish` or `--dry-run` (and the same on `run`) overrides `publish.enabled` for one run; the scheduler and the API follow it.
+Jobs: `feedback`, `collect`, `score`, `curate`, `run`, `discover`, `candidates`. Restart the service after changing the schedule. Write weekdays as names (`sun`, `mon-fri`): APScheduler numbers them from Monday, unlike cron, so a numeric weekday is rejected. `curator curate --publish` or `--dry-run` (and the same on `run`) overrides `publish.enabled` for one run; the scheduler and the API follow it.
 
 All three files are read from `CURATOR_CONFIG_DIR`. `sources.yaml` and `interests.yaml` are read at the start of every job, so an edit applies from the next run without a restart; a schedule change in `app.yaml` needs one. The files in `config/` here are defaults for local runs; a deployment mounts its own. In the home lab, dev-environment renders them from notes in the Obsidian vault.
 
