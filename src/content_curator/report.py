@@ -37,6 +37,8 @@ def _pick(d: Decision) -> str:
     if c.also:
         links = ", ".join(f"[{src}]({url})" for src, _, url in c.also)
         also += f"\nAlso covered by: {links}\n"
+    if c.learned:
+        also += f"\nLearned {c.learned:+g}: {c.learned_why}\n"
     link = c.listen_url or c.url
     return (
         f"### {d.rank}. [{c.title}]({link})\n\n"
@@ -54,7 +56,36 @@ def _trial(t: dict) -> str:
             f"pick{'' if picks == 1 else 's'}, {_md(found)} on {(t['discovered_at'] or '')[:10]}. {t['url']}")
 
 
-def render(result: Result, stats: dict, dry_run: bool, trials: list[dict] | None = None) -> str:
+def _learning(result: Result, mode: str, shadow: dict[int, Decision] | None) -> list[str]:
+    """In shadow mode, the picks learning would add and drop; in any mode, the biggest adjustments."""
+    lines = ["", f"## Learning ({mode})", ""]
+    if shadow is not None:
+        picked = {d.candidate.item_id for d in result.picks}
+        added = [d for i, d in shadow.items() if i not in picked]
+        dropped = [d for d in result.picks if d.bucket == "core" and d.candidate.item_id not in shadow]
+        if not added and not dropped:
+            lines += ["With learning on, the picks would be the same.", ""]
+        for d in added:
+            c = d.candidate
+            lines.append(f"- would add [{_md(c.title)}]({c.url}) ({_md(c.source_name)}), "
+                         f"{c.overall} {c.learned:+g}: {_md(c.learned_why)}")
+        for d in dropped:
+            c = d.candidate
+            lines.append(f"- would drop [{_md(c.title)}]({c.url}) ({_md(c.source_name)}), "
+                         f"{c.overall} {c.learned:+g}: {_md(c.learned_why) or 'pushed out by the others'}")
+        lines.append("")
+    moved = sorted((d.candidate for d in result.picks + result.near_misses if d.candidate.learned),
+                   key=lambda c: -abs(c.learned))[:10]
+    if moved:
+        lines += ["| Adjustment | Item | Why |", "|---|---|---|"]
+        lines += [f"| {c.learned:+g} | [{_md(c.title)}]({c.url}) | {_md(c.learned_why)} |" for c in moved]
+    else:
+        lines.append("No adjustments yet: no feedback on these sources or anything like them.")
+    return lines
+
+
+def render(result: Result, stats: dict, dry_run: bool, trials: list[dict] | None = None,
+           learning_mode: str = "off", shadow: dict[int, Decision] | None = None) -> str:
     when = datetime.now(UTC).strftime("%Y-%m-%d %H:%M UTC")
     lines = [
         f"# Curator picks, {when}",
@@ -90,6 +121,8 @@ def render(result: Result, stats: dict, dry_run: bool, trials: list[dict] | None
         rest = [t for t in active if not t.get("picks")]
         if rest:
             lines += ["No pick yet:", ""] + [_trial(t) for t in rest]
+    if learning_mode != "off":
+        lines += _learning(result, learning_mode, shadow)
     lines += ["", "## Run stats", "", "```"]
     lines += [f"{k}: {v}" for k, v in stats.items()]
     lines += ["```", ""]

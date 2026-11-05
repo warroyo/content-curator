@@ -24,7 +24,7 @@ TRIAL_SHOWS_ADDED = Counter("curator_trial_shows_added_total", "Podcast shows ad
 TRIAL_FEEDS_ADDED = Counter("curator_trial_feeds_added_total", "Suggested feeds added as trial sources")
 CANDIDATES_REJECTED = Counter("curator_candidates_rejected_total", "Suggested feeds rejected by the checks")
 FOLLOWS = Counter("curator_follows_total", "Sources followed or unfollowed from Raindrop tags", ["state"])
-FEEDBACK = Counter("curator_feedback_total", "Picks tagged read or meh, or deleted, in Raindrop", ["kind"])
+FEEDBACK = Counter("curator_feedback_total", "Picks tagged read or meh, deleted or favourited in Raindrop", ["kind"])
 PICKS = Counter("curator_picks_total", "Items picked", ["bucket"])
 PUBLISHED = Counter("curator_published_total", "Picks sent to Raindrop", ["status"])
 PUBLISH_FAILURES = Counter("curator_publish_failures_total", "Curate runs whose publish to Raindrop failed")
@@ -40,7 +40,7 @@ def record(job: str, stats: dict) -> None:
     elif job == "feedback":
         for state in ("followed", "unfollowed"):
             FOLLOWS.labels(state).inc(stats.get(state, 0))
-        for kind in ("read", "meh", "deleted"):
+        for kind in ("read", "meh", "deleted", "favourite"):
             FEEDBACK.labels(kind).inc(stats.get(kind, 0))
     elif job == "score":
         ITEMS_SCORED.inc(stats.get("scored", 0))

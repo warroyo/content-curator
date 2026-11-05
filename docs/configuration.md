@@ -112,6 +112,20 @@ Removing a source from the file disables it in the database; its items stay. Sou
 | `max_new_per_run` | 5 | trials added per run |
 | `trial_days` | 30 | a trial is dropped after this many days unless followed |
 
+- `learning`: score adjustments from feedback on earlier picks (see [architecture](architecture.md#preference-learning)).
+
+| Key | Default | Meaning |
+|---|---|---|
+| `mode` | `shadow` | `off`; `shadow`: shown in the report, picks unchanged; `on`: core picks ranked with it |
+| `since` | none | ignore feedback before this date (`YYYY-MM-DD`): a reset that keeps the history |
+| `weights` | favourite 2, meh -2, deleted -0.5, read 0 | signal per kind of feedback |
+| `half_life_days` | 30 | a signal counts half after this many days |
+| `source_prior` | 5 | neutral signals a source's mean is shrunk toward |
+| `source_cap` | 0.5 | largest source adjustment |
+| `similar_from` | 0.6 | cosine similarity to a favourite or meh pick from which a candidate moves |
+| `similar_cap` | 0.5 | largest similarity adjustment |
+| `similar_days` | 90 | favourites and meh tags this recent count for similarity |
+
 - `feed_discovery`: checks of feeds suggested through `POST /api/candidates`.
 
 | Key | Default | Meaning |

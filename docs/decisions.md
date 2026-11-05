@@ -87,3 +87,13 @@ On the first run with podcasts, no episode was picked: most feeds give only show
 **Alternatives rejected.** Moving a pick to "AI read" by hand (fewer API calls, but Will prefers a tag). Deletion as the only "not wanted" action (one swipe, but it cannot tell "not this one" from "less like this"). Expiring untouched picks after N days (an untouched pick is unknown, and the curator does not move what you have not touched).
 
 **Consequences.** The rule that the curator never moves Raindrop content now has one exception: a pick you tagged `read` or `meh`, and only while it is still in the collection it was published to. A deletion is lost if the Trash is emptied before the next feedback run. `meh` and `deleted` are only recorded until preference learning uses them; `unfollow` stays the way to drop a whole source.
+
+## 2026-11-04: preference learning as capped adjustments, in shadow first
+
+**Context.** The `feedback` table records favourites, `meh` tags, deletions and reads. Nothing used them. About ten picks a day give at most a few dozen signals a week, only on items that were picked.
+
+**Decision.** Two adjustments to the overall score, worked out from the feedback on every curate run and never stored: one per source (decayed, shrunk mean signal, ±0.5 at most) and one for embedding similarity to recent favourites and `meh` picks (±0.5 at most). Weights: favourite +2, meh -2, deleted -0.5, read 0. Core picks only; a positive adjustment never lifts an item over `min_score`. `learning.mode` starts at `shadow`, which only reports what would change. `learning.since` resets.
+
+**Alternatives rejected.** Learning per topic tag (the tags are a handful of broad groups, so one meh would tilt a whole interest). Putting liked and disliked items into the scoring prompt (breaks the score cache and the explanation of why an item moved). A `like` tag for positives (the favourite is a long press in Raindrop's mobile app). Reading highlights (left for later). A read as a positive (finishing something is not liking it).
+
+**Consequences.** Favourites are read nightly from the curator's own collections only, back 90 days. Learning cannot narrow the discovery share. One signal moves a source by under 0.1, so learning shows only after a few weeks of feedback.

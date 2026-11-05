@@ -28,6 +28,7 @@ class FakeRaindrop:
         self.tagged: list[dict] = []
         self.searches: list[str] = []
         self.trash: list[dict] = []
+        self.by_collection: dict[int, list[dict]] = {}
 
     def handler(self, request: httpx.Request) -> httpx.Response:
         self.auth.add(request.headers.get("Authorization", ""))
@@ -50,7 +51,8 @@ class FakeRaindrop:
             return httpx.Response(200, json={"items": hits if int(request.url.params.get("page", 0)) == 0 else []})
         if path.startswith("/raindrops/") and request.method == "GET":
             page = int(request.url.params.get("page", 0))
-            items = self.trash if path == "/raindrops/-99" else self.inbox
+            cid = int(path.rsplit("/", 1)[1])
+            items = self.trash if cid == -99 else self.by_collection.get(cid, self.inbox)
             return httpx.Response(200, json={"items": items if page == 0 else []})
         if path.startswith("/raindrop/") and request.method == "PUT":
             self.updates[int(path.rsplit("/", 1)[1])] = body
@@ -227,6 +229,30 @@ def test_read_and_meh_tags_move_picks_out_and_deletions_are_recorded(conn):
     # A second pass finds the same pick still in the Trash and does not count it again.
     fake.tagged = []
     assert publish.apply_feedback(conn, Publish(), client_for(fake))["deleted"] == 0
+
+
+def test_favourites_are_recorded_and_forgotten_when_unfavourited(conn):
+    for item, rid in ((1, 701), (2, 702), (3, 703)):
+        pick(conn, item)
+        conn.execute("INSERT INTO published(item_id, raindrop_id, collection_id, link, status, published_at) "
+                     "VALUES (?, ?, 77, 'l', 'published', ?)", (item, rid, db.now()))
+    conn.execute("INSERT INTO feedback(item_id, kind, raindrop_id, recorded_at) VALUES (2, 'favourite', 702, ?)",
+                 (db.now(),))
+    fake = FakeRaindrop()
+    fake.collections = {"AI picks": 77, "AI read": 78}
+    fresh, old = "2099-01-01T00:00:00.000Z", "2000-01-01T00:00:00.000Z"
+    fake.by_collection = {
+        77: [{"_id": 701, "important": True, "created": fresh},
+             {"_id": 702, "important": False, "created": fresh},
+             {"_id": 999, "important": True, "created": fresh}],   # not a curator pick
+        78: [{"_id": 703, "important": True, "created": old}],     # past FAVOURITE_DAYS: not read
+    }
+
+    stats = publish.sync_favourites(conn, Publish(), client_for(fake))
+
+    assert stats == {"favourite": 1, "unfavourited": 1}
+    assert [tuple(r) for r in conn.execute("SELECT item_id, kind FROM feedback")] == [(1, "favourite")]
+    assert "AI skipped" not in fake.collections   # never created just to look in it
 
 
 def test_feedback_tags_can_be_turned_off(conn):
