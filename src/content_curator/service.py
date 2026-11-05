@@ -20,6 +20,7 @@ from content_curator import __version__, db, registry
 from content_curator import status as queries
 from content_curator.config import Settings, load_app_config, load_interests
 from content_curator.jobs import JOBS, JobBusy, JobRunner
+from content_curator.mcp_tools import build_mcp
 
 log = logging.getLogger(__name__)
 
@@ -60,6 +61,9 @@ def create_app(settings: Settings, runner: JobRunner | None = None, scheduler_en
     # Jobs run in child processes, so this process stays small between runs.
     runner = runner or JobRunner(settings, isolate=True)
     scheduler = build_scheduler(settings, runner) if scheduler_enabled else None
+    mcp = build_mcp(settings, runner, lambda: jobs_view())
+    # Stateless JSON: every tool call is one short request, so there are no sessions to keep.
+    mcp_app = mcp.streamable_http_app(stateless_http=True, json_response=True)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -68,7 +72,8 @@ def create_app(settings: Settings, runner: JobRunner | None = None, scheduler_en
             scheduler.start()
             for j in scheduler.get_jobs():
                 log.info("scheduled", extra={"job": j.name, "next_run": str(j.next_run_time)})
-        yield
+        async with mcp.session_manager.run():
+            yield
         if scheduler:
             scheduler.shutdown(wait=False)
         deadline = time.monotonic() + SHUTDOWN_WAIT_SECONDS
@@ -79,6 +84,7 @@ def create_app(settings: Settings, runner: JobRunner | None = None, scheduler_en
 
     app = FastAPI(title="content-curator", version=__version__, lifespan=lifespan)
     app.mount("/metrics", make_asgi_app())
+    app.router.routes.extend(mcp_app.routes)  # POST /mcp, MCP over streamable HTTP
 
     def conn():
         c = db.connect(settings.db_path)

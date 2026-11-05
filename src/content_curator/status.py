@@ -107,6 +107,17 @@ def latest_picks(conn: sqlite3.Connection, include_near_misses: bool = False) ->
             "items": [_pick(r) for r in rows]}
 
 
+def feedback(conn: sqlite3.Connection, days: int = 7) -> list[dict]:
+    """What you did with picks in Raindrop over the last `days`: read, meh, deleted, favourite."""
+    rows = conn.execute(
+        """SELECT f.kind, f.recorded_at, i.id AS item_id, i.title, i.url, s.id AS source_id, s.name AS source
+           FROM feedback f JOIN items i ON i.id = f.item_id JOIN sources s ON s.id = i.source_id
+           WHERE datetime(f.recorded_at) >= datetime('now', ?) ORDER BY f.recorded_at DESC""",
+        (f"-{int(days)} days",),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
 def item_detail(conn: sqlite3.Connection, item_id: int) -> dict | None:
     item = conn.execute(
         """SELECT i.id, i.title, i.url, i.canonical_url, i.author, i.published_at, i.fetched_at, i.word_count,
