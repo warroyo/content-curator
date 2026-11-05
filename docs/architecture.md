@@ -17,7 +17,8 @@
 | `report.py` | Markdown report of picks and near misses. |
 | `service.py` | `curator serve`: FastAPI app, APScheduler cron jobs from `config/app.yaml`, `/metrics`, `/healthz`. |
 | `jobs.py` | The jobs (`collect`, `score`, `curate`, `run`) and the runner that executes one at a time, records state and metrics. |
-| `status.py` | Read-only queries behind `/api/status`, picks and item detail. |
+| `status.py` | Read-only queries behind `/api/status`, picks, item detail and feedback. |
+| `mcp_tools.py` | MCP tools at `/mcp` for agents: the API's queries and actions, plus `weekly_review`. |
 | `cli.py` | `serve`, plus one-shot `collect`, `score`, `curate`, `run`, `status`, `import-opml`, `add-url`. |
 
 Model calls are the only non-deterministic step. Fetching, extraction, deduplication, the overall score and selection are plain code.
@@ -45,6 +46,21 @@ The container runs `curator serve`: one Python process with uvicorn, the schedul
 | `GET /api/reports/latest` | the latest markdown report |
 
 POST endpoints need `Authorization: Bearer $CURATOR_API_TOKEN` when the token is set. The API binds `127.0.0.1:8090` by default.
+
+### MCP
+
+`POST /mcp` serves the same queries and actions as MCP tools for agents (Claude Code, Hermes), over streamable HTTP, stateless and JSON. `mcp_tools.py` defines them:
+
+| Tool | Does |
+|---|---|
+| `status` | as `GET /api/status` |
+| `latest_picks`, `item` | the last run's picks (optionally near misses); one item and why it was or was not picked |
+| `report` | the latest report, or a day's (`date: YYYY-MM-DD`) |
+| `weekly_review` | the last `days` (default 7): feedback given in Raindrop with titles and sources, the source adjustments learning works out from it now, each report's Learning section, picks per run |
+| `sources`, `candidates` | as the API, with a status filter |
+| `add_url`, `follow_source`, `unfollow_source`, `suggest_sources`, `run_job` | as the POST endpoints |
+
+Write tools need the same bearer token as the POST endpoints, sent as the `Authorization` header the client is registered with; read tools are open. The MCP SDK's DNS-rebinding check accepts only `127.0.0.1`, `localhost` and `[::1]` as the `Host`.
 
 ### Resource use
 
