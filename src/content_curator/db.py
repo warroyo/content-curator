@@ -199,6 +199,17 @@ MIGRATIONS: list[str] = [
         changed_at TEXT NOT NULL
     );
     """,
+    # 8: what you did with a published pick in Raindrop: read, meh (less like this), deleted.
+    # One row per pick and kind, kept for preference learning and the quality measure.
+    """
+    CREATE TABLE feedback (
+        item_id INTEGER NOT NULL REFERENCES items(id),
+        kind TEXT NOT NULL,
+        raindrop_id INTEGER NOT NULL,
+        recorded_at TEXT NOT NULL,
+        PRIMARY KEY (item_id, kind)
+    );
+    """,
 ]
 
 

@@ -77,3 +77,13 @@ On the first run with podcasts, no episode was picked: most feeds give only show
 **Alternatives rejected.** Searching the web from the curator (needs a search API and is a different job; any agent or person can suggest instead). Letting the suggester validate feeds (a local model gets fetch-and-parse wrong; code does not). Writing followed sources back to `sources.yaml` or to the deployment's notes (ties the application to one deployment's config format; the config stays a hand-kept base list). Keeping picked trials forever (the old rule, which left trials nobody decided on).
 
 **Consequences.** The full source list is `sources.yaml` plus the database: `GET /api/sources` shows it. Who suggests feeds, and how, is the deployment's business; in the home lab a weekly Hermes job does. Podcast trials with picks that were never followed now end at `trial_days` like the rest; following one from an old pick brings it back.
+
+## 2026-11-04: read and meh tags, deletions recorded
+
+**Context.** Raindrop has no read state, so "AI picks" only grows: read picks, unwanted picks and new ones sit together. The plan had `meh` and deletion as feedback signals, but nothing read them.
+
+**Decision.** Three actions on a pick, each recorded in a `feedback` table. A `read` tag moves the pick to an "AI read" collection; a `meh` tag (less like this: its topics and source) moves it to "AI skipped"; deleting it is a light negative for that one item, read from the Trash. The curator removes the tag, as it does for `follow` and `unfollow`. "AI picks" becomes the unread queue. A new `feedback` job applies the tags every 30 minutes in the day, so a tagged pick leaves the queue the same day; `collect` applies them too.
+
+**Alternatives rejected.** Moving a pick to "AI read" by hand (fewer API calls, but Will prefers a tag). Deletion as the only "not wanted" action (one swipe, but it cannot tell "not this one" from "less like this"). Expiring untouched picks after N days (an untouched pick is unknown, and the curator does not move what you have not touched).
+
+**Consequences.** The rule that the curator never moves Raindrop content now has one exception: a pick you tagged `read` or `meh`, and only while it is still in the collection it was published to. A deletion is lost if the Trash is emptied before the next feedback run. `meh` and `deleted` are only recorded until preference learning uses them; `unfollow` stays the way to drop a whole source.

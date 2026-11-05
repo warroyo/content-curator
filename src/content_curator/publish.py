@@ -12,6 +12,11 @@ with the explanation added to its note. Moving, not copying, keeps your own note
 
 Follow and unfollow are tags too: `follow` or `unfollow` on a pick, anywhere in the account, follows
 or drops the source it came from on the next `collect`, and the curator removes the tag.
+
+Raindrop has no read state, so feedback is tags and deletions as well: `read` or `meh` on a pick is
+recorded, the tag comes off, and a pick still in the picks collection moves to "AI read" or
+"AI skipped", leaving the picks collection as the unread queue. A deleted pick is recorded from the
+Trash. Only picks you tagged or deleted are touched.
 """
 
 from __future__ import annotations
@@ -35,10 +40,13 @@ API = "https://api.raindrop.io/rest/v1"
 BATCH = 100
 RETRIES = 3
 PAGE = 50
+TRASH = -99
 
 DESCRIPTIONS = {
     "picks": "Nightly picks from content-curator. The note on each says why it was picked.",
     "inbox": "Save links here. content-curator scores them overnight and moves them to the picks with its take.",
+    "read": "Picks you tagged read. content-curator moves them here from the picks.",
+    "meh": "Picks you tagged meh: less like this. content-curator moves them here from the picks.",
 }
 
 
@@ -264,6 +272,54 @@ def apply_follow_tags(conn: sqlite3.Connection, cfg: Publish, client: Raindrop) 
     if stats["followed"] or stats["unfollowed"]:
         log.info("follow tags applied", extra=stats)
     return stats
+
+
+def apply_feedback(conn: sqlite3.Connection, cfg: Publish, client: Raindrop) -> dict:
+    """Record picks tagged `read_tag` or `meh_tag`, and picks deleted to the Trash.
+
+    A tagged pick loses the tag and, if it is still in the collection it was published to, moves to
+    `read_collection` or `skipped_collection`; one you moved elsewhere stays where you put it. A
+    tagged raindrop the curator did not publish keeps its tag and is counted as unknown. A deletion
+    is seen only while the pick is in the Trash, so emptying the Trash before the next run loses it.
+    """
+    stats = {"read": 0, "meh": 0, "deleted": 0, "feedback_unknown": 0}
+    for tag, kind, collection in ((cfg.read_tag, "read", cfg.read_collection),
+                                  (cfg.meh_tag, "meh", cfg.skipped_collection)):
+        if not tag:
+            continue
+        target: int | None = None
+        for r in client.tagged(tag):
+            rid = int(r["_id"])
+            row = conn.execute("SELECT item_id, collection_id FROM published WHERE raindrop_id = ?", (rid,)).fetchone()
+            if row is None:
+                stats["feedback_unknown"] += 1
+                continue
+            fields: dict = {"tags": [t for t in r.get("tags") or [] if t != tag]}
+            if collection and (r.get("collection") or {}).get("$id") == row["collection_id"]:
+                if target is None:
+                    target = client.collection_id(collection, DESCRIPTIONS[kind], cfg.icon)
+                fields["collection"] = {"$id": target}
+            client.update(rid, fields)
+            _record_feedback(conn, row["item_id"], kind, rid)
+            stats[kind] += 1
+
+    published = dict(conn.execute("SELECT raindrop_id, item_id FROM published").fetchall())
+    if published:
+        for r in client.raindrops(TRASH):
+            rid = int(r["_id"])
+            if rid in published and _record_feedback(conn, published[rid], "deleted", rid):
+                stats["deleted"] += 1
+    if any(stats.values()):
+        log.info("feedback applied", extra=stats)
+    return stats
+
+
+def _record_feedback(conn: sqlite3.Connection, item_id: int, kind: str, raindrop_id: int) -> bool:
+    """Store one piece of feedback; False if it was already recorded."""
+    return conn.execute(
+        "INSERT OR IGNORE INTO feedback(item_id, kind, raindrop_id, recorded_at) VALUES (?, ?, ?, ?)",
+        (item_id, kind, raindrop_id, now()),
+    ).rowcount == 1
 
 
 def publish(conn: sqlite3.Connection, run_id: int, picks: list[Decision], cfg: Publish,

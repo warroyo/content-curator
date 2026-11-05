@@ -71,6 +71,7 @@ SQLite in WAL mode at `/data/curator.db`, migrated through `PRAGMA user_version`
 | `inbox` | links pulled from the Raindrop inbox collection, with your note and tags, until moved into the picks |
 | `candidates` | suggested feeds: who suggested them and why, the feed found, the fit verdict, and `pending`, `trial` or `rejected` |
 | `follows` | follow and unfollow decisions per source, which outlive `sources.yaml` |
+| `feedback` | what you did with a published pick: `read`, `meh` or `deleted`, one row per pick and kind |
 
 ## Same-story grouping
 
@@ -91,6 +92,18 @@ The curator creates its collections on first use, in list view, with a descripti
 ### Inbox
 
 Links you save to the inbox collection ("To curate"), from the phone's share sheet or the browser extension, are pulled in by `collect` as items of the `manual` source, with full text extracted like any page. The nightly run scores them, and `curate` adds every scored inbox link to the picks as `submitted`, on top of the daily count and whatever the score: the point is the curator's take on something you chose. Publishing then moves that same raindrop into the picks collection, sets the title, prepends the explanation to the note (keeping yours as "Your note: …") and adds the curator's tags to yours. Moving rather than copying keeps your highlights. In a dry run the report lists them under "You submitted" and they stay in the inbox.
+
+### Read, meh and deleted
+
+Raindrop has no read state, so the picks collection would only grow. Feedback is tags and deletions instead, read by the `feedback` job (every 30 minutes in the day by default) and at the start of every `collect`:
+
+| You do | The curator |
+|---|---|
+| tag a pick `read` | records `read`, removes the tag, moves the pick to "AI read" |
+| tag a pick `meh` | records `meh` (less like this: its topics and source), removes the tag, moves the pick to "AI skipped" |
+| delete a pick | records `deleted` (a light negative: not this one) from the Trash |
+
+A tagged pick moves only if it is still in the collection it was published to; one you moved elsewhere keeps its place and loses the tag. A tag on a raindrop the curator did not publish is left alone. A deletion is seen only while the pick is in the Trash, so emptying the Trash before the next run loses it. Nothing is moved that you did not tag, and untouched picks stay in "AI picks". The `feedback` table only records for now; preference learning will use it. `curator status` shows the last 7 days as `feedback_7d`.
 
 ## Podcasts
 

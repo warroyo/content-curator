@@ -27,6 +27,7 @@ class FakeRaindrop:
         self.auth: set[str] = set()
         self.tagged: list[dict] = []
         self.searches: list[str] = []
+        self.trash: list[dict] = []
 
     def handler(self, request: httpx.Request) -> httpx.Response:
         self.auth.add(request.headers.get("Authorization", ""))
@@ -49,7 +50,8 @@ class FakeRaindrop:
             return httpx.Response(200, json={"items": hits if int(request.url.params.get("page", 0)) == 0 else []})
         if path.startswith("/raindrops/") and request.method == "GET":
             page = int(request.url.params.get("page", 0))
-            return httpx.Response(200, json={"items": self.inbox if page == 0 else []})
+            items = self.trash if path == "/raindrops/-99" else self.inbox
+            return httpx.Response(200, json={"items": items if page == 0 else []})
         if path.startswith("/raindrop/") and request.method == "PUT":
             self.updates[int(path.rsplit("/", 1)[1])] = body
             return httpx.Response(200, json={"result": True, "item": body})
@@ -195,6 +197,50 @@ def test_follow_tags_follow_or_drop_the_source_then_come_off(conn):
     # even though sources.yaml still lists it.
     ingest.sync_sources(conn, [Source(id="c", name="Configured", url="https://c.test/feed")])
     assert dict(conn.execute("SELECT id, enabled FROM sources").fetchall()) == {"t": 1, "c": 0}
+
+
+def test_read_and_meh_tags_move_picks_out_and_deletions_are_recorded(conn):
+    for item, rid in ((1, 601), (2, 602), (3, 603), (4, 604)):
+        pick(conn, item)
+        conn.execute("INSERT INTO published(item_id, raindrop_id, collection_id, link, status, published_at) "
+                     "VALUES (?, ?, 77, 'l', 'published', ?)", (item, rid, db.now()))
+    fake = FakeRaindrop()
+    fake.collections = {"AI picks": 77}
+    fake.tagged = [{"_id": 601, "tags": ["ai-curated", "read"], "collection": {"$id": 77}},
+                   {"_id": 602, "tags": ["meh"], "collection": {"$id": 77}},
+                   {"_id": 603, "tags": ["read"], "collection": {"$id": 12}},   # you moved it: stays put
+                   {"_id": 999, "tags": ["read"], "collection": {"$id": 77}},   # not a curator pick
+                   {"_id": 605, "tags": ["reading"], "collection": {"$id": 77}}]  # prefix match: ignored
+    fake.trash = [{"_id": 604}, {"_id": 888}]
+
+    stats = publish.apply_feedback(conn, Publish(), client_for(fake))
+
+    assert stats == {"read": 2, "meh": 1, "deleted": 1, "feedback_unknown": 1}
+    read_id, skipped_id = fake.collections["AI read"], fake.collections["AI skipped"]
+    assert fake.updates == {601: {"tags": ["ai-curated"], "collection": {"$id": read_id}},
+                            602: {"tags": [], "collection": {"$id": skipped_id}},
+                            603: {"tags": []}}
+    assert fake.collection_bodies["AI skipped"]["description"]
+    rows = conn.execute("SELECT item_id, kind FROM feedback ORDER BY item_id").fetchall()
+    assert [tuple(r) for r in rows] == [(1, "read"), (2, "meh"), (3, "read"), (4, "deleted")]
+
+    # A second pass finds the same pick still in the Trash and does not count it again.
+    fake.tagged = []
+    assert publish.apply_feedback(conn, Publish(), client_for(fake))["deleted"] == 0
+
+
+def test_feedback_tags_can_be_turned_off(conn):
+    fake = FakeRaindrop()
+    stats = publish.apply_feedback(conn, Publish(read_tag="", meh_tag=""), client_for(fake))
+    assert stats == {"read": 0, "meh": 0, "deleted": 0, "feedback_unknown": 0}
+    # Nothing published, so the Trash is not read either.
+    assert fake.searches == [] and fake.updates == {}
+
+
+def test_feedback_job_without_a_token_does_nothing(settings):
+    from content_curator import jobs
+
+    assert jobs.feedback(settings) == {}
 
 
 def test_saved_lowest_rank_first_so_best_is_on_top(conn):

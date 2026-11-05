@@ -227,6 +227,14 @@ class Publish(BaseModel):
     # removed from the raindrop. Empty turns one off.
     follow_tag: str = "follow"
     unfollow_tag: str = "unfollow"
+    # Tags you put on a pick to say what you did with it, read by the `feedback` job and on every
+    # collect, then removed. A pick still in `collection` is moved out: `read_tag` to
+    # `read_collection`, `meh_tag` ("less like this") to `skipped_collection`. Deleting a pick is
+    # recorded too, from Raindrop's Trash. Empty turns a tag off.
+    read_tag: str = "read"
+    meh_tag: str = "meh"
+    read_collection: str = "AI read"
+    skipped_collection: str = "AI skipped"
 
 
 class AppConfig(BaseModel):

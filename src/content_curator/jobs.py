@@ -50,28 +50,44 @@ def data_lock(settings: Settings) -> Iterator[None]:
         yield
 
 
+def _apply_feedback(conn, settings: Settings) -> dict:
+    """Follow/unfollow, read and meh tags, and deleted picks, from Raindrop. Raises PublishError."""
+    if not settings.raindrop_token:
+        return {}
+    from content_curator import publish
+
+    publish_cfg = load_app_config(settings.config_dir).publish
+    client = publish.client_from(settings)
+    stats = publish.apply_follow_tags(conn, publish_cfg, client)
+    stats.update(publish.apply_feedback(conn, publish_cfg, client))
+    return stats
+
+
+def feedback(settings: Settings) -> dict:
+    """Apply what you did with picks in Raindrop. A few API calls and no model, so it can run often."""
+    conn = db.connect(settings.db_path)
+    try:
+        return _apply_feedback(conn, settings)
+    finally:
+        conn.close()
+
+
 def collect(settings: Settings, force: bool = False) -> dict:
-    """Apply follow/unfollow tags from Raindrop, fetch due sources, then pull links saved to the Raindrop
-    inbox. A Raindrop failure is logged, not fatal."""
-    from content_curator import ingest
+    """Apply feedback from Raindrop, fetch due sources, then pull links saved to the Raindrop inbox.
+    A Raindrop failure is logged, not fatal."""
+    from content_curator import ingest, publish
 
     conn = db.connect(settings.db_path)
     try:
         publish_cfg = load_app_config(settings.config_dir).publish
-        follow_stats: dict = {}
-        if settings.raindrop_token and (publish_cfg.follow_tag or publish_cfg.unfollow_tag):
-            from content_curator import publish
-
-            try:
-                follow_stats = publish.apply_follow_tags(conn, publish_cfg, publish.client_from(settings))
-            except publish.PublishError as e:
-                follow_stats = {"follow_tags_error": str(e)}
-                log.warning("raindrop follow tags failed", extra={"error": str(e)})
+        try:
+            feedback_stats = _apply_feedback(conn, settings)
+        except publish.PublishError as e:
+            feedback_stats = {"feedback_error": str(e)}
+            log.warning("raindrop feedback failed", extra={"error": str(e)})
         stats = ingest.collect(conn, settings, load_sources(settings.config_dir), force=force)
-        stats.update(follow_stats)
+        stats.update(feedback_stats)
         if settings.raindrop_token and publish_cfg.inbox_collection:
-            from content_curator import publish
-
             try:
                 stats.update(publish.pull_inbox(conn, settings, publish_cfg, publish.client_from(settings)))
             except publish.PublishError as e:
@@ -203,6 +219,7 @@ def pipeline(settings: Settings, dry_run: bool | None = None, force: bool = Fals
 
 
 JOBS: dict[str, Callable[..., dict]] = {
+    "feedback": feedback,
     "collect": collect,
     "stories": stories,
     "score": score,
