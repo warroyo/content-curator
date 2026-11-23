@@ -24,7 +24,9 @@ from content_curator.jobs import JOBS, JobBusy, JobRunner
 INSTRUCTIONS = """\
 The content curator collects feeds, scores each item 0-10 against Will's interests with a local
 model, and publishes a few picks a day to Raindrop.io. Will reads them there and gives feedback:
-a `read` tag, a `meh` tag (less like this), deleting a pick, or favouriting it (more like this).
+a `read` tag, a `meh` tag (less like this), deleting a pick, or favouriting it (more like this,
+and keep it: favourites move to "AI saved"). Picks work like a daily paper: one left untouched is
+removed by the next night's run, and that records no feedback.
 Preference learning turns that feedback into small score adjustments; in shadow mode it only
 reports what it would change. Use `weekly_review` for how the week went, `latest_picks` and
 `item` for why something was or was not picked, `sources` for what is followed or on trial.

@@ -267,6 +267,12 @@ class Publish(BaseModel):
     meh_tag: str = "meh"
     read_collection: str = "AI read"
     skipped_collection: str = "AI skipped"
+    # The picks work like a daily paper: a pick you have not kept is removed (to Raindrop's Trash) by
+    # the first curate run at least this many days after it was published, so "AI picks" holds only
+    # the latest picks. Favourite a pick (Raindrop's heart) to keep it: it moves to `keep_collection`
+    # and is never removed. Tagged picks have already moved out and are not touched. 0 keeps every pick.
+    expire_after_days: int = Field(1, ge=0)
+    keep_collection: str = "AI saved"
 
 
 class AppConfig(BaseModel):

@@ -62,6 +62,7 @@ def _apply_feedback(conn, settings: Settings, favourites: bool = False) -> dict:
     client = publish.client_from(settings)
     stats = publish.apply_follow_tags(conn, publish_cfg, client)
     stats.update(publish.apply_feedback(conn, publish_cfg, client))
+    stats.update(publish.file_kept(conn, publish_cfg, client))
     if favourites:
         stats.update(publish.sync_favourites(conn, publish_cfg, client))
     return stats
@@ -190,6 +191,12 @@ def curate(settings: Settings, dry_run: bool | None = None, extra_stats: dict | 
         run.stats.update(candidates=len(candidates), picks=len(result.picks), buckets=buckets, **(extra_stats or {}))
         publish_error = None
         if not dry_run:
+            # Yesterday's paper goes out before today's comes in. A failure here never blocks publishing.
+            try:
+                run.stats.update(publish.expire_picks(conn, publish_cfg, publish.client_from(settings)))
+            except publish.PublishError as e:
+                run.stats["expire_error"] = str(e)
+                log.warning("expiring picks failed", extra={"error": str(e)})
             try:
                 run.stats.update(publish.publish(conn, run.id, result.picks, publish_cfg,
                                                  publish.client_from(settings)))

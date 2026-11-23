@@ -41,6 +41,8 @@ publish:
   meh_tag: meh                   # less like this: recorded, moved to skipped_collection; empty = off
   read_collection: AI read
   skipped_collection: AI skipped
+  expire_after_days: 1           # untouched picks are removed this many nights after publishing; 0 = keep all
+  keep_collection: AI saved      # favourited picks move here and are never removed; empty = left in place
 ```
 
 Jobs: `feedback`, `collect`, `score`, `curate`, `run`, `discover`, `candidates`. Restart the service after changing the schedule. Write weekdays as names (`sun`, `mon-fri`): APScheduler numbers them from Monday, unlike cron, so a numeric weekday is rejected. `curator curate --publish` or `--dry-run` (and the same on `run`) overrides `publish.enabled` for one run; the scheduler and the API follow it.

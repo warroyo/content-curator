@@ -29,6 +29,7 @@ class FakeRaindrop:
         self.searches: list[str] = []
         self.trash: list[dict] = []
         self.by_collection: dict[int, list[dict]] = {}
+        self.deleted: list[int] = []
 
     def handler(self, request: httpx.Request) -> httpx.Response:
         self.auth.add(request.headers.get("Authorization", ""))
@@ -57,6 +58,9 @@ class FakeRaindrop:
         if path.startswith("/raindrop/") and request.method == "PUT":
             self.updates[int(path.rsplit("/", 1)[1])] = body
             return httpx.Response(200, json={"result": True, "item": body})
+        if path.startswith("/raindrop/") and request.method == "DELETE":
+            self.deleted.append(int(path.rsplit("/", 1)[1]))
+            return httpx.Response(200, json={"result": True})
         if path == "/import/url/exists":
             dupes = [{"link": u, "_id": self.saved[u]} for u in body["urls"] if u in self.saved]
             return httpx.Response(200, json={"result": bool(dupes), "ids": [d["_id"] for d in dupes],
@@ -321,3 +325,61 @@ def test_inbox_link_is_pulled_then_moved_into_picks(conn, settings, monkeypatch)
     assert moved["note"].startswith("Curator's take.") and "Your note: read this" in moved["note"]
     assert moved["tags"][0] == "k8s" and "ai-submitted" in moved["tags"]
     assert conn.execute("SELECT status FROM inbox WHERE raindrop_id=9001").fetchone()[0] == "published"
+
+
+def published_row(conn, item: int, rid: int, status: str = "published", at: str | None = None) -> None:
+    pick(conn, item)
+    conn.execute("INSERT INTO published(item_id, raindrop_id, collection_id, link, status, published_at) "
+                 "VALUES (?, ?, 77, 'l', ?, ?)", (item, rid, status, at or db.now()))
+
+
+def test_unkept_picks_expire_the_next_night(conn):
+    from datetime import UTC, datetime, timedelta
+
+    night = datetime(2026, 11, 22, 8, 30, tzinfo=UTC)
+    last_night = (night - timedelta(days=1, minutes=5)).isoformat(timespec="seconds")
+    tonight = night.isoformat(timespec="seconds")
+    published_row(conn, 1, 801, at=last_night)                        # untouched: expires
+    published_row(conn, 2, 802, at=last_night)                        # favourited: kept
+    published_row(conn, 3, 803, status="submitted", at=last_night)    # your own link: stays
+    published_row(conn, 4, 804, status="already_saved", at=last_night)  # already yours: stays
+    published_row(conn, 5, 805, at=tonight)                           # tonight's paper: stays
+    fake = FakeRaindrop()
+    fake.collections = {"AI picks": 77}
+    fake.by_collection = {77: [{"_id": rid, "important": rid == 802} for rid in (801, 802, 803, 804, 805, 999)]}
+
+    stats = publish.expire_picks(conn, Publish(), client_for(fake), at=night + timedelta(minutes=1))
+
+    assert stats == {"expired": 1}
+    assert fake.deleted == [801]
+    assert conn.execute("SELECT status FROM published WHERE raindrop_id = 801").fetchone()[0] == "expired"
+    # The curator put it in the Trash, so it is not taken for your deletion.
+    fake.trash = [{"_id": 801}]
+    assert publish.apply_feedback(conn, Publish(read_tag="", meh_tag=""), client_for(fake))["deleted"] == 0
+    assert conn.execute("SELECT COUNT(*) FROM feedback").fetchone()[0] == 0
+    # A second run does not delete it again.
+    assert publish.expire_picks(conn, Publish(), client_for(fake), at=night)["expired"] == 0
+
+
+def test_expiry_can_be_turned_off(conn):
+    published_row(conn, 1, 801, at="2000-01-01T00:00:00+00:00")
+    fake = FakeRaindrop()
+    fake.collections = {"AI picks": 77}
+    fake.by_collection = {77: [{"_id": 801}]}
+    assert publish.expire_picks(conn, Publish(expire_after_days=0), client_for(fake)) == {"expired": 0}
+    assert fake.deleted == []
+
+
+def test_favourited_picks_move_to_saved(conn):
+    published_row(conn, 1, 901)
+    published_row(conn, 2, 902)
+    fake = FakeRaindrop()
+    fake.collections = {"AI picks": 77}
+    fake.by_collection = {77: [{"_id": 901, "important": True}, {"_id": 902, "important": False},
+                               {"_id": 999, "important": True}]}   # not a curator pick
+
+    assert publish.file_kept(conn, Publish(), client_for(fake)) == {"kept": 1}
+    saved = fake.collections["AI saved"]
+    assert fake.updates == {901: {"collection": {"$id": saved}}}
+    assert fake.collection_bodies["AI saved"]["description"]
+    assert publish.file_kept(conn, Publish(keep_collection=""), client_for(fake)) == {"kept": 0}

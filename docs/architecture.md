@@ -118,10 +118,14 @@ Raindrop has no read state, so the picks collection would only grow. Feedback is
 | tag a pick `read` | records `read`, removes the tag, moves the pick to "AI read" |
 | tag a pick `meh` | records `meh` (less like this: its topics and source), removes the tag, moves the pick to "AI skipped" |
 | delete a pick | records `deleted` (a light negative: not this one) from the Trash |
+| favourite a pick | records `favourite` (more like this) and moves the pick to "AI saved", where it stays |
+| nothing | the next night's curate removes the pick to the Trash; no feedback is recorded |
 
-A tagged pick moves only if it is still in the collection it was published to; one you moved elsewhere keeps its place and loses the tag. A tag on a raindrop the curator did not publish is left alone. A deletion is seen only while the pick is in the Trash, so emptying the Trash before the next run loses it. Nothing is moved that you did not tag, and untouched picks stay in "AI picks". `curator status` shows the last 7 days as `feedback_7d`.
+A tagged pick moves only if it is still in the collection it was published to; one you moved elsewhere keeps its place and loses the tag. A tag on a raindrop the curator did not publish is left alone. A deletion is seen only while the pick is in the Trash, so emptying the Trash before the next run loses it. A favourited pick moves to "AI saved" on the next `feedback` run, within half an hour in the day.
 
-A favourite (Raindrop's heart, `important`) is recorded too, by `collect` before each nightly curate, from the curator's own collections ("AI picks", "AI read", "AI skipped") for picks published in the last 90 days. Unfavouriting removes it. A favourite on a pick you moved to a collection of your own is not seen.
+"AI picks" is a daily paper. Before publishing, each nightly curate removes, to the Trash, every pick still in "AI picks" that is at least `expire_after_days` old (1 by default, with 4 hours of slack for run timing) and not favourited, and marks it `expired` in `published`. Only raindrops the curator created are removed: a link you submitted through the inbox, or one already in your account when it was picked, stays. An expired pick is never published again and is not taken for a deletion. `expire_after_days: 0` keeps every pick. `curator status` shows the last 7 days as `feedback_7d`.
+
+A favourite (Raindrop's heart, `important`) is recorded too, by `collect` before each nightly curate, from the curator's own collections ("AI picks", "AI saved", "AI read", "AI skipped") for picks published in the last 90 days. Unfavouriting removes it. A favourite on a pick you moved to a collection of your own is not seen.
 
 ## Preference learning
 
