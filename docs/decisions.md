@@ -101,3 +101,13 @@ On the first run with podcasts, no episode was picked: most feeds give only show
 ## 2026-11-05: MCP tools inside the service, not a separate server
 
 Context: Claude Code and Hermes both use the curator (questions about picks, a weekly review on Telegram), and neither had more than the HTTP API to go on. Decision: an MCP server built with the MCP Python SDK, mounted at `/mcp` in the existing FastAPI app over stateless streamable HTTP. It calls the same query functions as the API, so there is one process, one port and no `docker exec`. Write tools check the API bearer token, as the POST endpoints do. `weekly_review` is new: it gathers what a weekly review needs (feedback with titles, current source adjustments, each report's Learning section) into one call. Rejected: a stdio server (would need `docker exec` per client); a skill with curl examples per agent (two copies that drift from the API).
+
+## 2026-11-22: picks as a daily paper, favourite to keep
+
+**Context.** Untouched picks stayed in "AI picks" forever. At about eight a day the collection became a backlog Will would never get through, which defeats the point of a short daily list.
+
+**Decision.** Each nightly curate removes, to Raindrop's Trash, the curator's own picks still in "AI picks" a day after publishing, unless favourited. A favourite moves the pick to "AI saved", where nothing removes it. The removal is marked `expired` in `published` and records no feedback. Links you submitted or already had saved are never removed.
+
+**Alternatives rejected.** A `keep` tag (the favourite is already the one-tap positive, and a pick you want to keep is one you liked). Treating an expired pick as a light negative (an unread pick says nothing about the item, only about the day). Deleting permanently (the Trash leaves a day's paper recoverable).
+
+**Consequences.** The first run after this ships clears the existing backlog of untouched picks to the Trash. Favouriting now means both "more like this" and "keep", so learning sees every kept pick as a positive. "AI read" and "AI skipped" still grow, but only with picks you acted on.

@@ -15,8 +15,11 @@ or drops the source it came from on the next `collect`, and the curator removes 
 
 Raindrop has no read state, so feedback is tags and deletions as well: `read` or `meh` on a pick is
 recorded, the tag comes off, and a pick still in the picks collection moves to "AI read" or
-"AI skipped", leaving the picks collection as the unread queue. A deleted pick is recorded from the
-Trash. Only picks you tagged or deleted are touched.
+"AI skipped". A deleted pick is recorded from the Trash.
+
+The picks collection is a daily paper, not a backlog: a favourited pick moves to "AI saved" and is
+kept, and a pick left untouched is removed to the Trash by the next night's curate (`expire_picks`).
+An expired pick is marked in `published`, so it is never taken for a deletion or published again.
 """
 
 from __future__ import annotations
@@ -44,12 +47,15 @@ PAGE = 50
 TRASH = -99
 # Favourites are looked for on picks published this recently.
 FAVOURITE_DAYS = 90
+# Slack on `expire_after_days`, so a nightly run a little earlier than last night's still clears it.
+EXPIRY_GRACE = timedelta(hours=4)
 
 DESCRIPTIONS = {
     "picks": "Nightly picks from content-curator. The note on each says why it was picked.",
     "inbox": "Save links here. content-curator scores them overnight and moves them to the picks with its take.",
     "read": "Picks you tagged read. content-curator moves them here from the picks.",
     "meh": "Picks you tagged meh: less like this. content-curator moves them here from the picks.",
+    "keep": "Picks you favourited. content-curator moves them here from the picks and never removes them.",
 }
 
 
@@ -150,6 +156,10 @@ class Raindrop:
 
     def update(self, raindrop_id: int, fields: dict) -> dict:
         return self._call("PUT", f"/raindrop/{raindrop_id}", json=fields).get("item", {})
+
+    def delete(self, raindrop_id: int) -> None:
+        """Move a raindrop to the Trash."""
+        self._call("DELETE", f"/raindrop/{raindrop_id}")
 
     def existing(self, urls: list[str]) -> dict[str, int]:
         """Raindrop id per URL for those already saved anywhere in the account."""
@@ -322,7 +332,8 @@ def apply_feedback(conn: sqlite3.Connection, cfg: Publish, client: Raindrop) -> 
             _record_feedback(conn, row["item_id"], kind, rid)
             stats[kind] += 1
 
-    published = dict(conn.execute("SELECT raindrop_id, item_id FROM published").fetchall())
+    # An expired pick is in the Trash because the curator put it there, not you.
+    published = dict(conn.execute("SELECT raindrop_id, item_id FROM published WHERE status != 'expired'").fetchall())
     if published:
         for r in client.raindrops(TRASH):
             rid = int(r["_id"])
@@ -336,7 +347,7 @@ def apply_feedback(conn: sqlite3.Connection, cfg: Publish, client: Raindrop) -> 
 def sync_favourites(conn: sqlite3.Connection, cfg: Publish, client: Raindrop) -> dict:
     """Record picks you favourited (Raindrop's `important`), and forget ones you unfavourited.
 
-    Reads the curator's own collections (picks, read, skipped), newest first, back to
+    Reads the curator's own collections (picks, saved, read, skipped), newest first, back to
     FAVOURITE_DAYS: a favourite on a pick you moved to a collection of your own is not seen.
     """
     published = dict(conn.execute("SELECT raindrop_id, item_id FROM published").fetchall())
@@ -344,7 +355,8 @@ def sync_favourites(conn: sqlite3.Connection, cfg: Publish, client: Raindrop) ->
     if not published:
         return stats
     since = (datetime.now(UTC) - timedelta(days=FAVOURITE_DAYS)).strftime("%Y-%m-%dT%H:%M:%S")
-    for title in dict.fromkeys(t for t in (cfg.collection, cfg.read_collection, cfg.skipped_collection) if t):
+    titles = (cfg.collection, cfg.keep_collection, cfg.read_collection, cfg.skipped_collection)
+    for title in dict.fromkeys(t for t in titles if t):
         collection = client.find_collection(title)
         if collection is None:
             continue
@@ -359,6 +371,62 @@ def sync_favourites(conn: sqlite3.Connection, cfg: Publish, client: Raindrop) ->
                     "DELETE FROM feedback WHERE item_id = ? AND kind = 'favourite'", (published[rid],)).rowcount
     if any(stats.values()):
         log.info("favourites synced", extra=stats)
+    return stats
+
+
+def file_kept(conn: sqlite3.Connection, cfg: Publish, client: Raindrop) -> dict:
+    """Move favourited picks out of the picks collection into `keep_collection`, where they stay.
+
+    Run with the rest of the feedback, so a pick you favourite during the day leaves "AI picks"
+    within half an hour. Only raindrops the curator published are moved.
+    """
+    stats = {"kept": 0}
+    if not cfg.keep_collection:
+        return stats
+    published = {r[0] for r in conn.execute("SELECT raindrop_id FROM published")}
+    picks = client.find_collection(cfg.collection) if published else None
+    if picks is None:
+        return stats
+    target: int | None = None
+    for r in client.raindrops(picks):
+        if int(r["_id"]) not in published or not r.get("important"):
+            continue
+        if target is None:
+            target = client.collection_id(cfg.keep_collection, DESCRIPTIONS["keep"], cfg.icon)
+        client.update(int(r["_id"]), {"collection": {"$id": target}})
+        stats["kept"] += 1
+    if stats["kept"]:
+        log.info("kept picks filed", extra=stats | {"collection": cfg.keep_collection})
+    return stats
+
+
+def expire_picks(conn: sqlite3.Connection, cfg: Publish, client: Raindrop,
+                 at: datetime | None = None) -> dict:
+    """Remove picks still sitting untouched in the picks collection `expire_after_days` after publishing.
+
+    Only raindrops the curator created are removed (status 'published'): a link you submitted
+    through the inbox, or one already in your account when it was picked, is yours and stays. A
+    favourited pick stays. A removed pick goes to the Trash and is marked 'expired', which records
+    no feedback: an unread pick says nothing about whether you would have liked it.
+    """
+    stats = {"expired": 0}
+    if cfg.expire_after_days <= 0:
+        return stats
+    cutoff = (at or datetime.now(UTC)) - timedelta(days=cfg.expire_after_days) + EXPIRY_GRACE
+    due = {r[0] for r in conn.execute("SELECT raindrop_id FROM published WHERE status = 'published' "
+                                      "AND published_at <= ?", (cutoff.isoformat(timespec="seconds"),))}
+    picks = client.find_collection(cfg.collection) if due else None
+    if picks is None:
+        return stats
+    for r in client.raindrops(picks):
+        rid = int(r["_id"])
+        if rid not in due or r.get("important"):
+            continue
+        client.delete(rid)
+        conn.execute("UPDATE published SET status = 'expired' WHERE raindrop_id = ?", (rid,))
+        stats["expired"] += 1
+    if stats["expired"]:
+        log.info("unkept picks expired", extra=stats | {"collection": cfg.collection})
     return stats
 
 

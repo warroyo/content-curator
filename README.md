@@ -29,6 +29,7 @@ flowchart LR
 - `collect` fetches sources with conditional requests, gets full text from the feed or the page (respecting `robots.txt`), and marks items with the same URL, canonical URL or text as duplicates.
 - Podcast episodes are scored on show notes and published transcripts and linked to Apple Podcasts. A weekly `discover` job finds new shows and checks feeds suggested through `POST /api/candidates`; the good ones run as trials, and a `follow` or `unfollow` tag on a pick in Raindrop keeps or drops its source.
 - Raindrop has no read state, so a `read` or `meh` tag on a pick records it and moves it out of "AI picks", and a deleted pick is recorded from the Trash. The `feedback` job applies these tags every 30 minutes in the day.
+- The picks are a daily paper, not a backlog: a pick you favourite moves to "AI saved" and stays, and one you leave untouched is removed to the Trash by the next night's run (`publish.expire_after_days`). Removing it records no feedback.
 - Favourites, `meh` tags and deletions feed preference learning: small, capped adjustments for a pick's source and for being like something you favourited or tagged meh. It starts in shadow mode, shown in the report only.
 - Agents use the curator through MCP tools at `/mcp` (status, picks, reports, a weekly review of feedback and learning, sources, and the same actions as the API).
 - `stories` embeds each fresh item with `local-embed` and groups articles about the same event, so one story yields one pick.
