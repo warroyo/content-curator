@@ -12,6 +12,7 @@ sources:
   - {id: huggingface, name: Hugging Face blog, url: "https://huggingface.co/blog/feed.xml", topics: [topic-ai]}
   - {id: openai-news, name: OpenAI news, url: "https://openai.com/news/rss.xml", topics: [topic-ai]}
   - {id: mcp-blog, name: Model Context Protocol blog, url: "https://blog.modelcontextprotocol.io/index.xml", topics: [topic-ai]}
+  - {id: katelynlesse, name: Katelyn Lesse, url: "https://katelynlesse.com/feed.xml", topics: [topic-ai]}
 
   # Infrastructure and cloud native
   - {id: kubernetes, name: Kubernetes blog, url: "https://kubernetes.io/feed.xml", topics: [topic-kubernetes]}
