@@ -1,10 +1,12 @@
 # syntax=docker/dockerfile:1
-# Multi-arch (linux/amd64, linux/arm64), Alpine-based: every dependency ships musllinux
+# Multi-arch (linux/amd64, linux/arm64), Debian slim (glibc): every dependency ships manylinux
 # wheels, so nothing compiles. Targets: runtime (default) and test.
+# Not Alpine: under musl, lxml in the extraction thread pool corrupted the heap and the nightly
+# run died with SIGSEGV in ld-musl's allocator (2026-11-24).
 
 FROM ghcr.io/astral-sh/uv:0.12 AS uv
 
-FROM python:3.12-alpine AS base
+FROM python:3.12-slim AS base
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     UV_COMPILE_BYTECODE=1 \
@@ -33,10 +35,10 @@ COPY config ./config
 ENV PATH=/app/.venv/bin:$PATH
 CMD ["pytest", "-q"]
 
-FROM python:3.12-alpine AS runtime
+FROM python:3.12-slim AS runtime
 LABEL org.opencontainers.image.source="https://github.com/warroyo/content-curator" \
       org.opencontainers.image.description="Self-hosted content curator"
-RUN adduser -D -H -u 1000 -h /data curator \
+RUN useradd --uid 1000 --no-create-home --home-dir /data --shell /usr/sbin/nologin curator \
     && mkdir -p /data /config && chown curator /data
 COPY --from=build /app/.venv /app/.venv
 COPY config /config.example
